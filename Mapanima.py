@@ -129,6 +129,9 @@ if gdf_total is not None:
         if not gdf_filtrado.empty:
             m = folium.Map(location=[4.5, -74.1], zoom_start=5, tiles="CartoDB positron")
 
+            bounds = gdf_filtrado.total_bounds  # [minx, miny, maxx, maxy]
+            m.fit_bounds([[bounds[1], bounds[0]], [bounds[3], bounds[2]]])
+
             def style_function_by_tipo(feature):
                 tipo = feature["properties"]["cn_ci"]
                 color = "#228B22" if tipo == "ci" else "#8B4513"
