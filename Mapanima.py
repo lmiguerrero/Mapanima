@@ -7,6 +7,16 @@
 import streamlit as st
 st.set_page_config(page_title="DAE - Geovisor Étnico", layout="wide")
 
+# --- Ajuste visual para reducir espacio en blanco del mapa ---
+st.markdown("""
+<style>
+    .element-container:has(> iframe) {
+        height: 650px !important;
+        margin-bottom: 0rem !important;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 import geopandas as gpd
 import pandas as pd
 from io import BytesIO
@@ -16,7 +26,7 @@ import os
 import folium
 from streamlit_folium import st_folium
 
-st.title("🗺️ Mapanima - Geovisor Étnico")
+st.title("🗺️ DAE - Geovisor Étnico 🗺️")
 
 with st.expander("🧭 ¿Qué es Mapanima?"):
     st.markdown(
