@@ -197,9 +197,6 @@ if gdf_total is not None:
                 st.download_button(
                     label="⬇️ Descargar resultados como SHP",
                     data=zip_buffer.getvalue(),
-                    file_name="resultados_filtrados.zip",
-                    mime="application/zip"
-                ),
         file_name="resultados_filtrados.zip",
         mime="application/zip"
     )
