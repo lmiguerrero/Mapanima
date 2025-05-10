@@ -155,15 +155,8 @@ if gdf_total is not None:
                 )
             ).add_to(m)
 
-            if st.button("🔍 Enfocar resultados en el mapa"):
-                st.session_state["enfocar"] = True
-
-            if st.session_state.get("enfocar", False):
-                bounds = gdf_filtrado.total_bounds
-                m.fit_bounds([[bounds[1], bounds[0]], [bounds[3], bounds[2]]])
-                st.session_state["enfocar"] = False
-
-            st_data = st_folium(m, use_container_width=True, height=600)
+            
+            st_data = st_folium(m, width=1200, height=600)
 
             if st.sidebar.button("💾 Exportar mapa a HTML"):
                 with tempfile.NamedTemporaryFile(suffix=".html", delete=False) as tmpfile:
@@ -183,23 +176,28 @@ if gdf_total is not None:
             st.dataframe(df_resultados)
 
             # --- Botón para descargar CSV ---
-            csv = df_resultados.to_csv(index=False).encode('utf-8')
-            st.download_button(
-                label="⬇️ Descargar resultados como CSV",
-                data=csv,
-                file_name="resultados_filtrados.csv",
-                mime="text/csv"
-            )
-        else:
-            st.warning("⚠️ No se encontraron resultados con los filtros aplicados.")
-
-# --- Créditos al pie ---
-st.markdown("""---""")
-st.markdown(
-    "<div style='text-align: center; font-size: 14px;'>"
-    "Realizado por <strong>Ing. Luis Miguel Guerrero</strong> — DAE — "
-    "<a href='mailto:luis.guerrero@urt.gov.co'>luis.guerrero@urt.gov.co</a>"
-    "</div>",
-    unsafe_allow_html=True
+csv = df_resultados.to_csv(index=False).encode('utf-8')
+st.download_button(
+    label="⬇️ Descargar resultados como CSV",
+    data=csv,
+    file_name="resultados_filtrados.csv",
+    mime="text/csv"
 )
+
+# --- Botón para descargar SHP ---
+with tempfile.TemporaryDirectory() as tmpdir:
+    shp_path = os.path.join(tmpdir, "resultados_filtrados.shp")
+    gdf_filtrado.to_file(shp_path)
+    zip_buffer = BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w") as zipf:
+        for root, dirs, files in os.walk(tmpdir):
+            for file in files:
+                filepath = os.path.join(root, file)
+                zipf.write(filepath, arcname=os.path.basename(filepath))
+    st.download_button(
+        label="⬇️ Descargar resultados como SHP",
+        data=zip_buffer.getvalue(),
+        file_name="resultados_filtrados.zip",
+        mime="application/zip"
+    )
 
