@@ -8,7 +8,7 @@
 
 - Cargar un archivo `.zip` con un shapefile unificado de territorios étnicos (CI y CN).
 - Aplicar filtros por:
-  - Etapa del proceso (Administrativa, Judicial, Posfallo)
+  - Etapa del proceso (Administrativa, Judicial, Posfallo )
   - Estado del caso (según clasificación DAE)
   - Tipo de territorio (`ci` o `cn`)
   - Departamento
