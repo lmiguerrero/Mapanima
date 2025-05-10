@@ -156,8 +156,12 @@ if gdf_total is not None:
             ).add_to(m)
 
             if st.button("🔍 Enfocar resultados en el mapa"):
-                bounds = gdf_filtrado.total_bounds  # [minx, miny, maxx, maxy]
+                st.session_state["enfocar"] = True
+
+            if st.session_state.get("enfocar", False):
+                bounds = gdf_filtrado.total_bounds
                 m.fit_bounds([[bounds[1], bounds[0]], [bounds[3], bounds[2]]])
+                st.session_state["enfocar"] = False
 
             st_data = st_folium(m, use_container_width=True, height=600)
 
