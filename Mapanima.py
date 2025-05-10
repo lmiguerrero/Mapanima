@@ -36,7 +36,8 @@ import folium
 from streamlit_folium import st_folium
 
 st.markdown(
-    "<h1 style='text-align: center; color: #2e6f57;'>🗺️ Mapanima - Geovisor Étnico</h1>",
+    "<h1 style='text-align: center; color: #2e6f57;'>🗺️ Mapanima - Geovisor Étnico<p style='text-align: center; font-size: 16px; margin-top: -10px;'>Mapanima nace de la fusión entre “mapa” y “ánima”, evocando no solo la representación gráfica de un territorio, sino su alma, su energía viva.<br><br>El nombre surge como una metáfora del territorio étnico, entendido no como una extensión vacía delimitada por coordenadas, sino como un espacio sagrado, habitado, sentido y narrado por los pueblos originarios.</p>
+",
     unsafe_allow_html=True
 )
 st.image("GEOVISOR.png", use_container_width=True)
@@ -139,7 +140,7 @@ if gdf_total is not None:
                     "fillOpacity": 0.6
                 }
 
-            folium.GeoJson(
+            gj = folium.GeoJson(
                 gdf_filtrado,
                 style_function=style_function_by_tipo,
                 tooltip=folium.GeoJsonTooltip(
@@ -148,6 +149,10 @@ if gdf_total is not None:
                     localize=True
                 )
             ).add_to(m)
+
+            if st.button("🔍 Enfocar resultados en el mapa"):
+                bounds = gdf_filtrado.total_bounds  # [minx, miny, maxx, maxy]
+                m.fit_bounds([[bounds[1], bounds[0]], [bounds[3], bounds[2]]])
 
             st_data = st_folium(m, use_container_width=True, height=600)
 
