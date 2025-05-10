@@ -5,7 +5,7 @@
 
 
 import streamlit as st
-st.set_page_config(page_title="DAE - Geovisor Étnico", layout="wide")
+st.set_page_config(page_title="Mapanima - Geovisor Étnico", layout="wide")
 
 import geopandas as gpd
 import pandas as pd
@@ -17,19 +17,6 @@ import folium
 from streamlit_folium import st_folium
 
 st.title("🗺️ Mapanima - Geovisor Étnico")
-
-with st.expander("🧭 ¿Qué es Mapanima?"):
-    st.markdown(
-        """
-        <div style='font-size:16px; text-align:justify;'>
-        <strong>Mapanima</strong> nace de la fusión entre “mapa” y “ánima”, evocando no solo la representación gráfica de un territorio, sino su alma, su energía viva.<br><br>
-        Este nombre es una metáfora del territorio étnico, entendido no como una extensión vacía delimitada por coordenadas, sino como un espacio sagrado, habitado, sentido y narrado por los pueblos originarios.<br><br>
-        <strong>Mapanima</strong> honra la cosmovisión indígena donde la tierra tiene memoria, espíritu y dignidad.
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
 st.image("GEOVISOR.png", use_container_width=True)
 
 # --- Función para cargar SHP desde un .zip ---
@@ -119,7 +106,7 @@ if gdf_total is not None:
             gdf_filtrado = gdf_filtrado.to_crs(epsg=4326)
 
             # Calcular centro y límites
-            bounds = gdf_filtrado.total_bounds
+            bounds = gdf_filtrado.total_bounds  # [minx, miny, maxx, maxy]
             centro_lat = (bounds[1] + bounds[3]) / 2
             centro_lon = (bounds[0] + bounds[2]) / 2
 
@@ -145,42 +132,11 @@ if gdf_total is not None:
                 )
             ).add_to(m)
 
+            # Zoom automático al resultado
             m.fit_bounds([[bounds[1], bounds[0]], [bounds[3], bounds[2]]])
 
             st_data = st_folium(m, width=1200, height=600)
 
-            # --- Mostrar tabla con resultados ---
-            st.subheader("📋 Resultados filtrados")
-            st.dataframe(gdf_filtrado.drop(columns="geometry"))
-
-            # --- Botón para descargar CSV ---
-            csv = gdf_filtrado.drop(columns="geometry").to_csv(index=False).encode("utf-8")
-            st.download_button(
-                label="⬇️ Descargar CSV de resultados",
-                data=csv,
-                file_name="resultados_filtrados.csv",
-                mime="text/csv"
-            )
-
-            # --- Botón para descargar Shapefile como ZIP ---
-            with tempfile.TemporaryDirectory() as tmpdir:
-                zip_path = os.path.join(tmpdir, "shapefile_filtrado.zip")
-                shp_base = os.path.join(tmpdir, "shapefile_filtrado")
-                gdf_filtrado.to_file(shp_base + ".shp", driver="ESRI Shapefile", encoding="utf-8")
-                with zipfile.ZipFile(zip_path, "w") as zipf:
-                    for ext in [".shp", ".shx", ".dbf", ".prj", ".cpg"]:
-                        fpath = shp_base + ext
-                        if os.path.exists(fpath):
-                            zipf.write(fpath, arcname="shapefile_filtrado" + ext)
-                with open(zip_path, "rb") as f:
-                    st.download_button(
-                        label="⬇️ Descargar Shapefile filtrado (.zip)",
-                        data=f,
-                        file_name="shapefile_filtrado.zip",
-                        mime="application/zip"
-                    )
-
-            # --- Exportar mapa a HTML ---
             if st.sidebar.button("💾 Exportar mapa a HTML"):
                 with tempfile.NamedTemporaryFile(suffix=".html", delete=False) as tmpfile:
                     m.save(tmpfile.name)
@@ -192,7 +148,6 @@ if gdf_total is not None:
                             file_name="mapa_etnico_filtrado.html",
                             mime="text/html"
                         )
-
         else:
             st.warning("⚠️ No se encontraron resultados con los filtros aplicados.")
 
