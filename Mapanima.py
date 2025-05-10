@@ -36,8 +36,13 @@ import folium
 from streamlit_folium import st_folium
 
 st.markdown(
-    "<h1 style='text-align: center; color: #2e6f57;'>🗺️ Mapanima - Geovisor Étnico<p style='text-align: center; font-size: 16px; margin-top: -10px;'>Mapanima nace de la fusión entre “mapa” y “ánima”, evocando no solo la representación gráfica de un territorio, sino su alma, su energía viva.<br><br>El nombre surge como una metáfora del territorio étnico, entendido no como una extensión vacía delimitada por coordenadas, sino como un espacio sagrado, habitado, sentido y narrado por los pueblos originarios.</p>
-",
+    """
+    <h1 style='text-align: center; color: #2e6f57;'>🗺️ Mapanima - Geovisor Étnico</h1>
+    <p style='text-align: center; font-size: 16px; margin-top: -10px;'>
+    Mapanima nace de la fusión entre “mapa” y “ánima”, evocando no solo la representación gráfica de un territorio, sino su alma, su energía viva.<br><br>
+    El nombre surge como una metáfora del territorio étnico, entendido no como una extensión vacía delimitada por coordenadas, sino como un espacio sagrado, habitado, sentido y narrado por los pueblos originarios.
+    </p>
+    """,
     unsafe_allow_html=True
 )
 st.image("GEOVISOR.png", use_container_width=True)
