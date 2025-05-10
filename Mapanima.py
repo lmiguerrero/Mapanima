@@ -155,7 +155,8 @@ if gdf_total is not None:
                 )
             ).add_to(m)
 
-            
+            bounds = gdf_filtrado.total_bounds
+            m.fit_bounds([[bounds[1], bounds[0]], [bounds[3], bounds[2]]])
             st_data = st_folium(m, width=1200, height=600)
 
             if st.sidebar.button("💾 Exportar mapa a HTML"):
