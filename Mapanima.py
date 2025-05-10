@@ -140,6 +140,8 @@ if gdf_total is not None:
         st.subheader("🗘️ Mapa filtrado")
 
         if not gdf_filtrado.empty:
+    if gdf_filtrado.crs and gdf_filtrado.crs.to_epsg() != 4326:
+        gdf_filtrado = gdf_filtrado.to_crs(epsg=4326)
             m = folium.Map(location=[4.5, -74.1], zoom_start=5, tiles="CartoDB positron")
 
             def style_function_by_tipo(feature):
