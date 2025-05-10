@@ -149,7 +149,7 @@ if gdf_total is not None:
                 )
             ).add_to(m)
 
-            st_data = st_folium(m, width=1200, height=600)
+            st_data = st_folium(m, use_container_width=True, height=600)
 
             if st.sidebar.button("💾 Exportar mapa a HTML"):
                 with tempfile.NamedTemporaryFile(suffix=".html", delete=False) as tmpfile:
