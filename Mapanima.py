@@ -102,7 +102,12 @@ if gdf_total is not None:
         st.subheader("🗺️ Mapa filtrado")
 
         if not gdf_filtrado.empty:
-            m = folium.Map(location=[4.5, -74.1], zoom_start=5, tiles="CartoDB positron")
+            # --- Calcular centroide y límites ---
+            bounds = gdf_filtrado.total_bounds  # [minx, miny, maxx, maxy]
+            centro_lat = (bounds[1] + bounds[3]) / 2
+            centro_lon = (bounds[0] + bounds[2]) / 2
+
+            m = folium.Map(location=[centro_lat, centro_lon], zoom_start=10, tiles="CartoDB positron")
 
             def style_function_by_tipo(feature):
                 tipo = feature["properties"]["cn_ci"]
@@ -114,7 +119,7 @@ if gdf_total is not None:
                     "fillOpacity": 0.6
                 }
 
-            folium.GeoJson(
+            geojson = folium.GeoJson(
                 gdf_filtrado,
                 style_function=style_function_by_tipo,
                 tooltip=folium.GeoJsonTooltip(
@@ -123,6 +128,9 @@ if gdf_total is not None:
                     localize=True
                 )
             ).add_to(m)
+
+            # Ajustar el zoom al área filtrada si es un solo resultado
+            m.fit_bounds([[bounds[1], bounds[0]], [bounds[3], bounds[2]]])
 
             st_data = st_folium(m, width=1200, height=600)
 
