@@ -162,6 +162,20 @@ if gdf_total is not None:
                             file_name="mapa_etnico_filtrado.html",
                             mime="text/html"
                         )
+
+            # --- Tabla de resultados ---
+            st.markdown("### 📋 Resultados tabulados")
+            df_resultados = gdf_filtrado.drop(columns='geometry')
+            st.dataframe(df_resultados)
+
+            # --- Botón para descargar CSV ---
+            csv = df_resultados.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="⬇️ Descargar resultados como CSV",
+                data=csv,
+                file_name="resultados_filtrados.csv",
+                mime="text/csv"
+            )
         else:
             st.warning("⚠️ No se encontraron resultados con los filtros aplicados.")
 
