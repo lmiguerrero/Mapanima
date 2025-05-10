@@ -36,23 +36,10 @@ import folium
 from streamlit_folium import st_folium
 
 st.markdown(
-    "<h1 style='text-align: center; color: #2e6f57;'>🗘️ Mapanima - Geovisor Étnico</h1>",
+    "<h1 style='text-align: center; color: #2e6f57;'>🗺️ Mapanima - Geovisor Étnico</h1>",
     unsafe_allow_html=True
 )
 st.image("GEOVISOR.png", use_container_width=True)
-
-# --- Texto de bienvenida con historia del nombre ---
-st.markdown(
-    """
-    <p style='text-align: justify; font-size:16px;'>
-    <strong>Mapanima</strong> nace de la fusión entre “mapa” y “ánima”, evocando no solo la representación gráfica de un territorio, sino su alma, su energía viva. 
-    El nombre surge como una metáfora del territorio indígena, entendido no como una extensión vacía delimitada por coordenadas, sino como un espacio sagrado, habitado, sentido y narrado por los pueblos originarios. 
-    <br><br>
-    Mapanima honra la cosmovisión indígena donde la tierra tiene memoria, espíritu y dignidad; donde cada río, montaña y sendero guarda historias ancestrales. Así, el visor no solo muestra información geográfica: revela un territorio vivo, que respira y se defiende.
-    </p>
-    """,
-    unsafe_allow_html=True
-)
 
 # --- Función para cargar SHP desde un .zip ---
 def cargar_shapefile_zip(uploaded_zip):
@@ -111,7 +98,7 @@ if gdf_total is not None:
 
     col_botones = st.sidebar.columns(2)
     with col_botones[0]:
-        if st.button("🧽 Aplicar filtros y mostrar mapa"):
+        if st.button("🧭 Aplicar filtros y mostrar mapa"):
             st.session_state["mostrar_mapa"] = True
     with col_botones[1]:
         if st.button("🔄 Reiniciar visor"):
@@ -137,11 +124,9 @@ if gdf_total is not None:
         if usar_simplify:
             gdf_filtrado["geometry"] = gdf_filtrado["geometry"].simplify(tolerancia, preserve_topology=True)
 
-        st.subheader("🗘️ Mapa filtrado")
+        st.subheader("🗺️ Mapa filtrado")
 
         if not gdf_filtrado.empty:
-    if gdf_filtrado.crs and gdf_filtrado.crs.to_epsg() != 4326:
-        gdf_filtrado = gdf_filtrado.to_crs(epsg=4326)
             m = folium.Map(location=[4.5, -74.1], zoom_start=5, tiles="CartoDB positron")
 
             def style_function_by_tipo(feature):
@@ -154,7 +139,7 @@ if gdf_total is not None:
                     "fillOpacity": 0.6
                 }
 
-            geojson_layer = folium.GeoJson(
+            folium.GeoJson(
                 gdf_filtrado,
                 style_function=style_function_by_tipo,
                 tooltip=folium.GeoJsonTooltip(
@@ -162,15 +147,11 @@ if gdf_total is not None:
                     aliases=["ID:", "Territorio:", "Etnia:", "Departamento:", "Municipio:", "Etapa:", "Estado:"],
                     localize=True
                 )
-            )
-            geojson_layer.add_to(m)
-
-            bounds = gdf_filtrado.total_bounds
-            m.fit_bounds([[bounds[1], bounds[0]], [bounds[3], bounds[2]]])
+            ).add_to(m)
 
             st_data = st_folium(m, use_container_width=True, height=600)
 
-            if st.sidebar.button("📂 Exportar mapa a HTML"):
+            if st.sidebar.button("💾 Exportar mapa a HTML"):
                 with tempfile.NamedTemporaryFile(suffix=".html", delete=False) as tmpfile:
                     m.save(tmpfile.name)
                     st.success("✅ Mapa exportado correctamente.")
@@ -195,25 +176,6 @@ if gdf_total is not None:
                 file_name="resultados_filtrados.csv",
                 mime="text/csv"
             )
-
-            # --- Botón para descargar Shapefile como ZIP ---
-            with tempfile.TemporaryDirectory() as tmpdir:
-                shp_path = os.path.join(tmpdir, "territorios_filtrados.shp")
-                gdf_filtrado.to_file(shp_path, driver="ESRI Shapefile", encoding="utf-8")
-
-                zip_buffer = BytesIO()
-                with zipfile.ZipFile(zip_buffer, "w") as zipf:
-                    for filename in os.listdir(tmpdir):
-                        filepath = os.path.join(tmpdir, filename)
-                        zipf.write(filepath, arcname=filename)
-
-                st.download_button(
-                    label="⬇️ Descargar resultados como SHP (.zip)",
-                    data=zip_buffer.getvalue(),
-                    file_name="territorios_filtrados.zip",
-                    mime="application/zip"
-                )
-
         else:
             st.warning("⚠️ No se encontraron resultados con los filtros aplicados.")
 
