@@ -5,7 +5,7 @@
 
 
 import streamlit as st
-st.set_page_config(page_title="DAE - Geovisor Étnico", layout="wide")
+st.set_page_config(page_title="Mapanima - Geovisor Étnico", layout="wide")
 
 # --- Ajuste visual para reducir espacio en blanco del mapa ---
 st.markdown("""
@@ -17,6 +17,9 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# --- Banner superior ---
+st.image("GEOVISOR.png", use_container_width=True)
+
 import geopandas as gpd
 import pandas as pd
 from io import BytesIO
@@ -26,7 +29,7 @@ import os
 import folium
 from streamlit_folium import st_folium
 
-st.title("🗺️ DAE - Geovisor Étnico 🗺️")
+st.title("🗺️ Mapanima - Geovisor Étnico")
 
 with st.expander("🧭 ¿Qué es Mapanima?"):
     st.markdown(
@@ -39,8 +42,6 @@ with st.expander("🧭 ¿Qué es Mapanima?"):
         """,
         unsafe_allow_html=True
     )
-
-st.image("GEOVISOR.png", use_container_width=True)
 
 # --- Función para cargar SHP desde un .zip ---
 def cargar_shapefile_zip(uploaded_zip):
