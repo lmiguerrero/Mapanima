@@ -7,25 +7,6 @@
 import streamlit as st
 st.set_page_config(page_title="Mapanima - Geovisor Étnico", layout="wide")
 
-# --- Estilo visual personalizado ---
-st.markdown(
-    """
-    <style>
-    .stApp {
-        background-color: #f0fff0;
-    }
-    div.stButton > button:first-child {
-        background-color: #2e6f57;
-        color: white;
-        border-radius: 5px;
-        border: none;
-        padding: 0.5em 1em;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
-
 import geopandas as gpd
 import pandas as pd
 from io import BytesIO
@@ -35,16 +16,7 @@ import os
 import folium
 from streamlit_folium import st_folium
 
-st.markdown(
-    """
-    <h1 style='text-align: center; color: #2e6f57;'>🗺️ Mapanima - Geovisor Étnico</h1>
-    <p style='text-align: center; font-size: 16px; margin-top: -10px;'>
-    Mapanima nace de la fusión entre “mapa” y “ánima”, evocando no solo la representación gráfica de un territorio, sino su alma, su energía viva.<br><br>
-    El nombre surge como una metáfora del territorio étnico, entendido no como una extensión vacía delimitada por coordenadas, sino como un espacio sagrado, habitado, sentido y narrado por los pueblos originarios.
-    </p>
-    """,
-    unsafe_allow_html=True
-)
+st.title("🗺️ Mapanima - Geovisor Étnico")
 st.image("GEOVISOR.png", use_container_width=True)
 
 # --- Función para cargar SHP desde un .zip ---
@@ -72,7 +44,6 @@ if gdf_total is not None:
     gdf_total['cn_ci'] = gdf_total['cn_ci'].str.lower()
 
     # --- Filtros en la barra lateral ---
-    st.sidebar.markdown("---")
     st.sidebar.header("🎯 Filtros")
 
     etapas = gdf_total['etapa'].dropna().unique().tolist()
@@ -91,14 +62,12 @@ if gdf_total is not None:
     nombre_buscar = st.sidebar.text_input("🔍 Buscar por nombre (nom_terr)")
 
     # --- Opciones de rendimiento ---
-    st.sidebar.markdown("---")
     st.sidebar.header("⚙️ Rendimiento")
     usar_simplify = st.sidebar.checkbox("Simplificar geometría", value=True)
     tolerancia = st.sidebar.slider("Nivel de simplificación", 0.00001, 0.001, 0.0001, step=0.00001, format="%.5f")
     st.sidebar.caption(f"Valor actual: `{tolerancia}`")
 
     # --- Estado del visor ---
-    st.sidebar.markdown("---")
     if "mostrar_mapa" not in st.session_state:
         st.session_state["mostrar_mapa"] = False
 
@@ -145,7 +114,7 @@ if gdf_total is not None:
                     "fillOpacity": 0.6
                 }
 
-            gj = folium.GeoJson(
+            folium.GeoJson(
                 gdf_filtrado,
                 style_function=style_function_by_tipo,
                 tooltip=folium.GeoJsonTooltip(
@@ -155,8 +124,6 @@ if gdf_total is not None:
                 )
             ).add_to(m)
 
-            bounds = gdf_filtrado.total_bounds
-            m.fit_bounds([[bounds[1], bounds[0]], [bounds[3], bounds[2]]])
             st_data = st_folium(m, width=1200, height=600)
 
             if st.sidebar.button("💾 Exportar mapa a HTML"):
@@ -170,35 +137,16 @@ if gdf_total is not None:
                             file_name="mapa_etnico_filtrado.html",
                             mime="text/html"
                         )
+        else:
+            st.warning("⚠️ No se encontraron resultados con los filtros aplicados.")
 
-            # --- Tabla de resultados ---
-            st.markdown("### 📋 Resultados tabulados")
-            df_resultados = gdf_filtrado.drop(columns='geometry')
-            st.dataframe(df_resultados)
-
-            # --- Botón para descargar CSV ---
-            csv = df_resultados.to_csv(index=False).encode('utf-8')
-            st.download_button(
-                label="⬇️ Descargar resultados como CSV",
-                data=csv,
-                file_name="resultados_filtrados.csv",
-                mime="text/csv"
-            )
-
-            # --- Botón para descargar SHP ---
-            with tempfile.TemporaryDirectory() as tmpdir:
-                shp_path = os.path.join(tmpdir, "resultados_filtrados.shp")
-                gdf_filtrado.to_file(shp_path)
-                zip_buffer = BytesIO()
-                with zipfile.ZipFile(zip_buffer, "w") as zipf:
-                    for root, dirs, files in os.walk(tmpdir):
-                        for file in files:
-                            filepath = os.path.join(root, file)
-                            zipf.write(filepath, arcname=os.path.basename(filepath))
-                st.download_button(
-                    label="⬇️ Descargar resultados como SHP",
-                    data=zip_buffer.getvalue(),
-        file_name="resultados_filtrados.zip",
-        mime="application/zip"
-    )
+# --- Créditos al pie ---
+st.markdown("""---""")
+st.markdown(
+    "<div style='text-align: center; font-size: 14px;'>"
+    "Realizado por <strong>Ing. Luis Miguel Guerrero</strong> — DAE — "
+    "<a href='mailto:luis.guerrero@urt.gov.co'>luis.guerrero@urt.gov.co</a>"
+    "</div>",
+    unsafe_allow_html=True
+)
 
