@@ -176,27 +176,30 @@ if gdf_total is not None:
             st.dataframe(df_resultados)
 
             # --- Botón para descargar CSV ---
-csv = df_resultados.to_csv(index=False).encode('utf-8')
-st.download_button(
-    label="⬇️ Descargar resultados como CSV",
-    data=csv,
-    file_name="resultados_filtrados.csv",
-    mime="text/csv"
-)
+            csv = df_resultados.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="⬇️ Descargar resultados como CSV",
+                data=csv,
+                file_name="resultados_filtrados.csv",
+                mime="text/csv"
+            )
 
-# --- Botón para descargar SHP ---
-with tempfile.TemporaryDirectory() as tmpdir:
-    shp_path = os.path.join(tmpdir, "resultados_filtrados.shp")
-    gdf_filtrado.to_file(shp_path)
-    zip_buffer = BytesIO()
-    with zipfile.ZipFile(zip_buffer, "w") as zipf:
-        for root, dirs, files in os.walk(tmpdir):
-            for file in files:
-                filepath = os.path.join(root, file)
-                zipf.write(filepath, arcname=os.path.basename(filepath))
-    st.download_button(
-        label="⬇️ Descargar resultados como SHP",
-        data=zip_buffer.getvalue(),
+            # --- Botón para descargar SHP ---
+            with tempfile.TemporaryDirectory() as tmpdir:
+                shp_path = os.path.join(tmpdir, "resultados_filtrados.shp")
+                gdf_filtrado.to_file(shp_path)
+                zip_buffer = BytesIO()
+                with zipfile.ZipFile(zip_buffer, "w") as zipf:
+                    for root, dirs, files in os.walk(tmpdir):
+                        for file in files:
+                            filepath = os.path.join(root, file)
+                            zipf.write(filepath, arcname=os.path.basename(filepath))
+                st.download_button(
+                    label="⬇️ Descargar resultados como SHP",
+                    data=zip_buffer.getvalue(),
+                    file_name="resultados_filtrados.zip",
+                    mime="application/zip"
+                ),
         file_name="resultados_filtrados.zip",
         mime="application/zip"
     )
