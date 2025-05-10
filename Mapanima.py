@@ -102,7 +102,10 @@ if gdf_total is not None:
         st.subheader("🗺️ Mapa filtrado")
 
         if not gdf_filtrado.empty:
-            # --- Calcular centroide y límites ---
+            # Reproyectar a WGS84 para folium
+            gdf_filtrado = gdf_filtrado.to_crs(epsg=4326)
+
+            # Calcular centro y límites
             bounds = gdf_filtrado.total_bounds  # [minx, miny, maxx, maxy]
             centro_lat = (bounds[1] + bounds[3]) / 2
             centro_lon = (bounds[0] + bounds[2]) / 2
@@ -129,7 +132,7 @@ if gdf_total is not None:
                 )
             ).add_to(m)
 
-            # Ajustar el zoom al área filtrada si es un solo resultado
+            # Zoom automático al resultado
             m.fit_bounds([[bounds[1], bounds[0]], [bounds[3], bounds[2]]])
 
             st_data = st_folium(m, width=1200, height=600)
