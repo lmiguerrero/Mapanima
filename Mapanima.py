@@ -45,7 +45,7 @@ st.image("GEOVISOR.png", use_container_width=True)
 st.markdown(
     """
     <p style='text-align: justify; font-size:16px;'>
-    <strong>Mapanima</strong> “mapa” y “ánima”, evocando no solo la representación gráfica de un territorio, sino su alma, su energía viva. 
+    <strong>Mapanima</strong> nace de la fusión entre “mapa” y “ánima”, evocando no solo la representación gráfica de un territorio, sino su alma, su energía viva. 
     El nombre surge como una metáfora del territorio indígena, entendido no como una extensión vacía delimitada por coordenadas, sino como un espacio sagrado, habitado, sentido y narrado por los pueblos originarios. 
     <br><br>
     Mapanima honra la cosmovisión indígena donde la tierra tiene memoria, espíritu y dignidad; donde cada río, montaña y sendero guarda historias ancestrales. Así, el visor no solo muestra información geográfica: revela un territorio vivo, que respira y se defiende.
@@ -140,11 +140,7 @@ if gdf_total is not None:
         st.subheader("🗘️ Mapa filtrado")
 
         if not gdf_filtrado.empty:
-            bounds = gdf_filtrado.total_bounds
-            center = [(bounds[1] + bounds[3]) / 2, (bounds[0] + bounds[2]) / 2]
-
-            m = folium.Map(location=center, zoom_start=8, tiles="CartoDB positron")
-            m.fit_bounds([[bounds[1], bounds[0]], [bounds[3], bounds[2]]])
+            m = folium.Map(location=[4.5, -74.1], zoom_start=5, tiles="CartoDB positron")
 
             def style_function_by_tipo(feature):
                 tipo = feature["properties"]["cn_ci"]
@@ -156,7 +152,7 @@ if gdf_total is not None:
                     "fillOpacity": 0.6
                 }
 
-            folium.GeoJson(
+            geojson_layer = folium.GeoJson(
                 gdf_filtrado,
                 style_function=style_function_by_tipo,
                 tooltip=folium.GeoJsonTooltip(
@@ -164,7 +160,11 @@ if gdf_total is not None:
                     aliases=["ID:", "Territorio:", "Etnia:", "Departamento:", "Municipio:", "Etapa:", "Estado:"],
                     localize=True
                 )
-            ).add_to(m)
+            )
+            geojson_layer.add_to(m)
+
+            bounds = gdf_filtrado.total_bounds
+            m.fit_bounds([[bounds[1], bounds[0]], [bounds[3], bounds[2]]])
 
             st_data = st_folium(m, use_container_width=True, height=600)
 
@@ -224,5 +224,4 @@ st.markdown(
     "</div>",
     unsafe_allow_html=True
 )
-
 
