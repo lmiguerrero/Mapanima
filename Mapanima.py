@@ -7,33 +7,25 @@
 import streamlit as st
 st.set_page_config(page_title="Mapanima - Geovisor Étnico", layout="wide")
 
-# --- Estilo visual: banner fijo, tipografía, mapa compacto ---
+# --- Estilo visual: tipografía, fondo, banner, leyenda ---
 st.markdown("""
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;500;700&display=swap" rel="stylesheet">
 <style>
-    html, body, [class*="css"] {
-        font-family: 'Inter', sans-serif;
-    }
-    .element-container:has(> iframe) {
-        height: 650px !important;
-        margin-bottom: 0rem !important;
-    }
-    header { visibility: hidden; }
-    .block-container::before {
-        content: '';
-        display: block;
-        position: fixed;
-        top: 0; left: 0; right: 0;
-        height: 70px;
-        background-color: white;
-        z-index: 9999;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        background-image: url('GEOVISOR.png');
-        background-repeat: no-repeat;
-        background-position: center;
-        background-size: contain;
-    }
-    .block-container { padding-top: 80px !important; }
+html, body, .stApp {
+    font-family: 'Inter', sans-serif;
+    background: linear-gradient(to bottom, #e6f2e6, #f9fff9);
+}
+.element-container:has(> iframe) {
+    height: 650px !important;
+    margin-bottom: 0rem !important;
+}
+.banner {
+    position: sticky;
+    top: 0;
+    z-index: 999;
+    background-color: white;
+    padding-bottom: 0.5rem;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -43,12 +35,16 @@ import zipfile
 import tempfile
 import os
 import folium
-import matplotlib.pyplot as plt
-from matplotlib.backends.backend_pdf import PdfPages
 from streamlit_folium import st_folium
 
-st.title("🗺️ Mapanima - Geovisor Étnico")
+# --- Banner superior como imagen ---
+with st.container():
+    st.markdown("<div class='banner'>", unsafe_allow_html=True)
+    st.image("GEOVISOR.png", use_container_width=True)
+    st.markdown("</div>", unsafe_allow_html=True)
 
+# --- Título e introducción ---
+st.title("🗺️ Mapanima - Geovisor Étnico")
 with st.expander("🧭 ¿Qué es Mapanima?"):
     st.markdown(
         """
@@ -61,7 +57,7 @@ with st.expander("🧭 ¿Qué es Mapanima?"):
         unsafe_allow_html=True
     )
 
-# --- Cargar shapefile desde ZIP ---
+# --- Cargar ZIP con shapefile ---
 def cargar_shapefile_zip(uploaded_zip):
     if not uploaded_zip:
         return None
@@ -74,32 +70,26 @@ def cargar_shapefile_zip(uploaded_zip):
                 return None
             return gpd.read_file(shp_path[0])
 
-# --- Carga inicial ---
+# --- Subir archivo ---
 st.sidebar.header("📂 Cargar capa")
 zip_territorios = st.sidebar.file_uploader("Sube archivo .zip con SHP unificado", type="zip")
 gdf_total = cargar_shapefile_zip(zip_territorios)
 
+# --- Si hay datos cargados ---
 if gdf_total is not None:
     gdf_total['etapa'] = gdf_total['etapa'].str.lower()
     gdf_total['estado_act'] = gdf_total['estado_act'].str.strip()
     gdf_total['cn_ci'] = gdf_total['cn_ci'].str.lower()
 
-    # --- Filtros ---
     st.sidebar.header("🎯 Filtros")
-
     etapa_sel = st.sidebar.multiselect("Filtrar por etapa", sorted(gdf_total['etapa'].dropna().unique()))
     estado_sel = st.sidebar.multiselect("Filtrar por estado del caso", sorted(gdf_total['estado_act'].dropna().unique()))
     tipo_sel = st.sidebar.multiselect("Filtrar por tipo de territorio", sorted(gdf_total['cn_ci'].dropna().unique()))
     depto_sel = st.sidebar.multiselect("Filtrar por departamento", sorted(gdf_total['departamen'].dropna().unique()))
-
-    # Buscador con autocompletado
     nombre_opciones = sorted(gdf_total['nom_terr'].dropna().unique())
     nombre_seleccionado = st.sidebar.selectbox("🔍 Buscar por nombre (nom_terr)", options=[""] + nombre_opciones)
-
-    # Buscador por ID
     id_buscar = st.sidebar.text_input("🔍 Buscar por ID (id_rtdaf)")
 
-    # --- Rendimiento ---
     st.sidebar.header("⚙️ Rendimiento")
     usar_simplify = st.sidebar.checkbox("Simplificar geometría", value=True)
     tolerancia = st.sidebar.slider("Nivel de simplificación", 0.00001, 0.001, 0.0001, step=0.00001, format="%.5f")
@@ -129,18 +119,21 @@ if gdf_total is not None:
             gdf_filtrado = gdf_filtrado[gdf_filtrado["id_rtdaf"].astype(str).str.contains(id_buscar)]
         if nombre_seleccionado:
             gdf_filtrado = gdf_filtrado[gdf_filtrado["nom_terr"] == nombre_seleccionado]
-
         if usar_simplify:
             gdf_filtrado["geometry"] = gdf_filtrado["geometry"].simplify(tolerancia, preserve_topology=True)
 
         st.subheader("🗺️ Mapa filtrado")
 
         if not gdf_filtrado.empty:
+            # Calcular área formateada
+            gdf_filtrado["area_formateada"] = gdf_filtrado["area_ha"].apply(
+                lambda ha: f"{int(ha)} ha + {int(round((ha - int(ha)) * 10000)):,} m²"
+            )
+
             gdf_filtrado = gdf_filtrado.to_crs(epsg=4326)
             bounds = gdf_filtrado.total_bounds
             centro_lat = (bounds[1] + bounds[3]) / 2
             centro_lon = (bounds[0] + bounds[2]) / 2
-
             m = folium.Map(location=[centro_lat, centro_lon], zoom_start=10, tiles="CartoDB positron")
 
             def style_function_by_tipo(feature):
@@ -153,101 +146,61 @@ if gdf_total is not None:
                     "fillOpacity": 0.6
                 }
 
-            campos_tooltip = ["id_rtdaf", "nom_terr", "etnia", "departamen", "municipio", "etapa", "estado_act"]
-            if "area_ha" in gdf_filtrado.columns:
-                campos_tooltip.append("area_ha")
-
-            geojson = folium.GeoJson(
+            folium.GeoJson(
                 gdf_filtrado,
                 style_function=style_function_by_tipo,
                 tooltip=folium.GeoJsonTooltip(
-                    fields=campos_tooltip,
-                    aliases=["ID:", "Territorio:", "Etnia:", "Departamento:", "Municipio:", "Etapa:", "Estado:", "Área (ha):"],
+                    fields=["id_rtdaf", "nom_terr", "etnia", "departamen", "municipio", "etapa", "estado_act", "area_formateada"],
+                    aliases=["ID:", "Territorio:", "Etnia:", "Departamento:", "Municipio:", "Etapa:", "Estado:", "Área:"],
                     localize=True
                 )
             ).add_to(m)
 
-            legend_html = '''
-            <div style="position: fixed; bottom: 60px; left: 20px; z-index: 1000;
+            leyenda_html = """
+            <div style='position: absolute; top: 10px; left: 10px; z-index: 9999;
                         background-color: white; padding: 10px; border: 1px solid #ccc;
-                        box-shadow: 2px 2px 6px rgba(0,0,0,0.2); font-size: 14px;">
-                <strong>Leyenda:</strong><br>
-                <span style="color:#228B22;">■</span> Comunidades indígenas (ci)<br>
-                <span style="color:#8B4513;">■</span> Comunidades negras (cn)
+                        font-size: 14px; box-shadow: 2px 2px 4px rgba(0,0,0,0.1);'>
+                <strong>Leyenda</strong><br>
+                🟢 Territorio indígena (ci)<br>
+                🟤 Territorio afrodescendiente (cn)
             </div>
-            '''
-            m.get_root().html.add_child(folium.Element(legend_html))
-
+            """
+            m.get_root().html.add_child(folium.Element(leyenda_html))
             m.fit_bounds([[bounds[1], bounds[0]], [bounds[3], bounds[2]]])
             st_data = st_folium(m, width=1200, height=600)
 
             st.subheader("📋 Resultados filtrados")
-            st.dataframe(gdf_filtrado.drop(columns="geometry"))
+            st.dataframe(gdf_filtrado.drop(columns=["geometry", "area_formateada"]))
 
             # Descargar CSV
             csv = gdf_filtrado.drop(columns="geometry").to_csv(index=False).encode("utf-8")
-            st.download_button(
-                label="⬇️ Descargar CSV de resultados",
-                data=csv,
-                file_name="resultados_filtrados.csv",
-                mime="text/csv"
-            )
+            st.download_button("⬇️ Descargar CSV de resultados", data=csv, file_name="resultados_filtrados.csv", mime="text/csv")
 
             # Descargar SHP como ZIP
             with tempfile.TemporaryDirectory() as tmpdir:
                 zip_path = os.path.join(tmpdir, "shapefile_filtrado.zip")
                 shp_base = os.path.join(tmpdir, "shapefile_filtrado")
-                gdf_filtrado.to_file(shp_base + ".shp", driver="ESRI Shapefile", encoding="utf-8")
+                gdf_filtrado.drop(columns="area_formateada").to_file(shp_base + ".shp", driver="ESRI Shapefile", encoding="utf-8")
                 with zipfile.ZipFile(zip_path, "w") as zipf:
                     for ext in [".shp", ".shx", ".dbf", ".prj", ".cpg"]:
                         fpath = shp_base + ext
                         if os.path.exists(fpath):
                             zipf.write(fpath, arcname="shapefile_filtrado" + ext)
                 with open(zip_path, "rb") as f:
-                    st.download_button(
-                        label="⬇️ Descargar Shapefile filtrado (.zip)",
-                        data=f,
-                        file_name="shapefile_filtrado.zip",
-                        mime="application/zip"
-                    )
+                    st.download_button("⬇️ Descargar Shapefile filtrado (.zip)", data=f, file_name="shapefile_filtrado.zip", mime="application/zip")
 
-            # Exportar PDF
-            if st.sidebar.button("🖨️ Generar PDF con mapa y tabla"):
-                with tempfile.TemporaryDirectory() as tmpdir:
-                    pdf_path = os.path.join(tmpdir, "mapanima_resultado.pdf")
-                    with PdfPages(pdf_path) as pdf:
-                        fig, ax = plt.subplots(figsize=(10, 10))
-                        gdf_filtrado.plot(ax=ax, column="cn_ci", legend=True, cmap="Set2", edgecolor="black")
-                        ax.set_title("Mapa de territorios filtrados - Mapanima", fontsize=14)
-                        ax.axis("off")
-                        pdf.savefig(fig, bbox_inches="tight")
-                        plt.close()
-
-                        fig, ax = plt.subplots(figsize=(12, 8))
-                        ax.axis("off")
-                        tabla = pd.DataFrame(gdf_filtrado.drop(columns="geometry")).head(30)
-                        table_data = tabla.values
-                        col_labels = tabla.columns
-                        table = ax.table(cellText=table_data, colLabels=col_labels, loc='center', cellLoc='left')
-                        table.auto_set_font_size(False)
-                        table.set_fontsize(8)
-                        table.scale(1.2, 1.2)
-                        ax.set_title("Resumen de atributos territoriales", fontsize=14)
-                        pdf.savefig(fig, bbox_inches="tight")
-                        plt.close()
-
-                    with open(pdf_path, "rb") as f:
-                        st.download_button(
-                            label="⬇️ Descargar PDF con mapa y tabla",
-                            data=f,
-                            file_name="mapanima_resultado.pdf",
-                            mime="application/pdf"
-                        )
+            # Descargar HTML
+            if st.sidebar.button("💾 Exportar mapa a HTML"):
+                with tempfile.NamedTemporaryFile(suffix=".html", delete=False) as tmpfile:
+                    m.save(tmpfile.name)
+                    st.success("✅ Mapa exportado correctamente.")
+                    with open(tmpfile.name, "rb") as f:
+                        st.download_button("⬇️ Descargar HTML del mapa", data=f, file_name="mapa_etnico_filtrado.html", mime="text/html")
 
         else:
             st.warning("⚠️ No se encontraron resultados con los filtros aplicados.")
 
-# --- Créditos al pie ---
+# --- Créditos ---
 st.markdown("""---""")
 st.markdown(
     "<div style='text-align: center; font-size: 14px;'>"
