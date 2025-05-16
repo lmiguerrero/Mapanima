@@ -66,6 +66,16 @@ st.markdown("""
         color: black;
         border-radius: 8px;
     }
+
+    /* Botones de descarga */
+    .stDownloadButton > button {
+    background-color: #ffffff;
+    color: #1b2e1b;
+    border: 1px solid #346b34;
+    border-radius: 6px;
+    font-weight: bold;
+    }
+    
     </style>
 """, unsafe_allow_html=True)
 
@@ -236,6 +246,7 @@ if gdf_total is not None:
                 f"""
                 <div style='
                     margin-top: 1em;
+                    margin-bottom: 1.5em;
                     padding: 0.7em;
                     background-color: #e8f5e9;
                     border-radius: 8px;
@@ -270,12 +281,12 @@ if gdf_total is not None:
                     st.download_button("⬇️ Descargar Shapefile filtrado (.zip)", data=f, file_name="shapefile_filtrado.zip", mime="application/zip")
 
             # Descargar HTML
-            if st.sidebar.button("💾 Exportar mapa a HTML"):
+            if st.sidebar.button("💾 Exportar mapa"):
                 with tempfile.NamedTemporaryFile(suffix=".html", delete=False) as tmpfile:
                     m.save(tmpfile.name)
                     st.success("✅ Mapa exportado correctamente.")
                     with open(tmpfile.name, "rb") as f:
-                        st.download_button("⬇️ Descargar HTML del mapa", data=f, file_name="mapa_etnico_filtrado.html", mime="text/html")
+                        st.download_button("⬇️ Descargar mapa", data=f, file_name="mapa_etnico_filtrado.html", mime="text/html")
 
         else:
             st.warning("⚠️ No se encontraron resultados con los filtros aplicados.")
