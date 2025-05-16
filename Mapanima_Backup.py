@@ -7,30 +7,44 @@
 import streamlit as st
 st.set_page_config(page_title="Mapanima - Geovisor Étnico", layout="wide")
 
-# --- Ajuste visual para reducir espacio en blanco del mapa ---
+# --- Estilo visual: tipografía, fondo, banner, leyenda ---
 st.markdown("""
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;500;700&display=swap" rel="stylesheet">
 <style>
-    .element-container:has(> iframe) {
-        height: 650px !important;
-        margin-bottom: 0rem !important;
-    }
+html, body, .stApp {
+    font-family: 'Inter', sans-serif;
+    background: linear-gradient(to bottom, #e6f2e6, #f9fff9);
+}
+.element-container:has(> iframe) {
+    height: 650px !important;
+    margin-bottom: 0rem !important;
+}
+.banner {
+    position: sticky;
+    top: 0;
+    z-index: 999;
+    background-color: white;
+    padding-bottom: 0.5rem;
+}
 </style>
 """, unsafe_allow_html=True)
 
-# --- Banner superior ---
-st.image("GEOVISOR.png", use_container_width=True)
-
 import geopandas as gpd
 import pandas as pd
-from io import BytesIO
 import zipfile
 import tempfile
 import os
 import folium
 from streamlit_folium import st_folium
 
-st.title("🗺️ Mapanima - Geovisor Étnico")
+# --- Banner superior como imagen ---
+with st.container():
+    st.markdown("<div class='banner'>", unsafe_allow_html=True)
+    st.image("GEOVISOR.png", use_container_width=True)
+    st.markdown("</div>", unsafe_allow_html=True)
 
+# --- Título e introducción ---
+st.title("🗺️ Mapanima - Geovisor Étnico")
 with st.expander("🧭 ¿Qué es Mapanima?"):
     st.markdown(
         """
@@ -43,7 +57,7 @@ with st.expander("🧭 ¿Qué es Mapanima?"):
         unsafe_allow_html=True
     )
 
-# --- Función para cargar SHP desde un .zip ---
+# --- Cargar ZIP con shapefile ---
 def cargar_shapefile_zip(uploaded_zip):
     if not uploaded_zip:
         return None
@@ -56,42 +70,42 @@ def cargar_shapefile_zip(uploaded_zip):
                 return None
             return gpd.read_file(shp_path[0])
 
-# --- Subir capa unificada desde la barra lateral ---
+# --- Subir archivo ---
 st.sidebar.header("📂 Cargar capa")
 zip_territorios = st.sidebar.file_uploader("Sube archivo .zip con SHP unificado", type="zip")
 gdf_total = cargar_shapefile_zip(zip_territorios)
 
+# --- Si hay datos cargados ---
 if gdf_total is not None:
-    # Normalizar campos
     gdf_total['etapa'] = gdf_total['etapa'].str.lower()
     gdf_total['estado_act'] = gdf_total['estado_act'].str.strip()
     gdf_total['cn_ci'] = gdf_total['cn_ci'].str.lower()
 
-    # --- Filtros en la barra lateral ---
     st.sidebar.header("🎯 Filtros")
-
-    etapas = gdf_total['etapa'].dropna().unique().tolist()
-    etapa_sel = st.sidebar.multiselect("Filtrar por etapa", sorted(etapas))
-
-    estados = gdf_total['estado_act'].dropna().unique().tolist()
-    estado_sel = st.sidebar.multiselect("Filtrar por estado del caso", sorted(estados))
-
-    tipos = gdf_total['cn_ci'].dropna().unique().tolist()
-    tipo_sel = st.sidebar.multiselect("Filtrar por tipo de territorio", sorted(tipos))
-
-    departamentos = gdf_total['departamen'].dropna().unique().tolist()
-    depto_sel = st.sidebar.multiselect("Filtrar por departamento", sorted(departamentos))
-
+    etapa_sel = st.sidebar.multiselect("Filtrar por etapa", sorted(gdf_total['etapa'].dropna().unique()))
+    estado_sel = st.sidebar.multiselect("Filtrar por estado del caso", sorted(gdf_total['estado_act'].dropna().unique()))
+    tipo_sel = st.sidebar.multiselect("Filtrar por tipo de territorio", sorted(gdf_total['cn_ci'].dropna().unique()))
+    depto_sel = st.sidebar.multiselect("Filtrar por departamento", sorted(gdf_total['departamen'].dropna().unique()))
+    nombre_opciones = sorted(gdf_total['nom_terr'].dropna().unique())
+    nombre_seleccionado = st.sidebar.selectbox("🔍 Buscar por nombre (nom_terr)", options=[""] + nombre_opciones)
     id_buscar = st.sidebar.text_input("🔍 Buscar por ID (id_rtdaf)")
-    nombre_buscar = st.sidebar.text_input("🔍 Buscar por nombre (nom_terr)")
 
-    # --- Opciones de rendimiento ---
+    
+    # --- Selector de fondo de mapa ---
+    fondos_disponibles = {
+        "OpenStreetMap": "OpenStreetMap",
+        "CartoDB Claro (Positron)": "CartoDB positron",
+        "CartoDB Oscuro": "CartoDB dark_matter",
+        "Satélite (Esri)": "Esri.WorldImagery",
+        "Esri NatGeo World Map": "Esri.NatGeoWorldMap",
+        "Esri World Topo Map": "Esri.WorldTopoMap"
+    }
+    fondo_seleccionado = st.sidebar.selectbox("🗺️ Fondo del mapa", list(fondos_disponibles.keys()), index=1)
+
     st.sidebar.header("⚙️ Rendimiento")
     usar_simplify = st.sidebar.checkbox("Simplificar geometría", value=True)
     tolerancia = st.sidebar.slider("Nivel de simplificación", 0.00001, 0.001, 0.0001, step=0.00001, format="%.5f")
-    st.sidebar.caption(f"Valor actual: `{tolerancia}`")
 
-    # --- Estado del visor ---
     if "mostrar_mapa" not in st.session_state:
         st.session_state["mostrar_mapa"] = False
 
@@ -103,8 +117,6 @@ if gdf_total is not None:
         if st.button("🔄 Reiniciar visor"):
             st.session_state["mostrar_mapa"] = False
             st.rerun()
-
-    # --- Generación del mapa con filtros ---
     if st.session_state["mostrar_mapa"]:
         gdf_filtrado = gdf_total.copy()
         if etapa_sel:
@@ -117,24 +129,24 @@ if gdf_total is not None:
             gdf_filtrado = gdf_filtrado[gdf_filtrado["departamen"].isin(depto_sel)]
         if id_buscar:
             gdf_filtrado = gdf_filtrado[gdf_filtrado["id_rtdaf"].astype(str).str.contains(id_buscar)]
-        if nombre_buscar:
-            gdf_filtrado = gdf_filtrado[gdf_filtrado["nom_terr"].str.lower().str.contains(nombre_buscar.lower())]
-
+        if nombre_seleccionado:
+            gdf_filtrado = gdf_filtrado[gdf_filtrado["nom_terr"] == nombre_seleccionado]
         if usar_simplify:
             gdf_filtrado["geometry"] = gdf_filtrado["geometry"].simplify(tolerancia, preserve_topology=True)
 
         st.subheader("🗺️ Mapa filtrado")
 
         if not gdf_filtrado.empty:
-            # Reproyectar a WGS84 para folium
-            gdf_filtrado = gdf_filtrado.to_crs(epsg=4326)
+            # Calcular área formateada
+            gdf_filtrado["area_formateada"] = gdf_filtrado["area_ha"].apply(
+                lambda ha: f"{int(ha)} ha + {int(round((ha - int(ha)) * 10000)):,} m²"
+            )
 
-            # Calcular centro y límites
+            gdf_filtrado = gdf_filtrado.to_crs(epsg=4326)
             bounds = gdf_filtrado.total_bounds
             centro_lat = (bounds[1] + bounds[3]) / 2
             centro_lon = (bounds[0] + bounds[2]) / 2
-
-            m = folium.Map(location=[centro_lat, centro_lon], zoom_start=10, tiles="CartoDB positron")
+            m = folium.Map(location=[centro_lat, centro_lon], zoom_start=10, tiles=fondos_disponibles[fondo_seleccionado])
 
             def style_function_by_tipo(feature):
                 tipo = feature["properties"]["cn_ci"]
@@ -146,68 +158,89 @@ if gdf_total is not None:
                     "fillOpacity": 0.6
                 }
 
-            geojson = folium.GeoJson(
+            folium.GeoJson(
                 gdf_filtrado,
                 style_function=style_function_by_tipo,
                 tooltip=folium.GeoJsonTooltip(
-                    fields=["id_rtdaf", "nom_terr", "etnia", "departamen", "municipio", "etapa", "estado_act"],
-                    aliases=["ID:", "Territorio:", "Etnia:", "Departamento:", "Municipio:", "Etapa:", "Estado:"],
+                    fields=["id_rtdaf", "nom_terr", "etnia", "departamen", "municipio", "etapa", "estado_act", "tipologia", "area_formateada"],
+                    aliases=["ID:", "Territorio:", "Etnia:", "Departamento:", "Municipio:", "Etapa:", "Estado:", "Tipología:", "Área:"],
                     localize=True
                 )
             ).add_to(m)
 
+            leyenda_html = """
+            <div style='position: absolute; top: 10px; left: 10px; z-index: 9999;
+                        background-color: white; padding: 10px; border: 1px solid #ccc;
+                        font-size: 14px; box-shadow: 2px 2px 4px rgba(0,0,0,0.1);'>
+                <strong>Leyenda</strong><br>
+                🟢 Territorio indígena (ci)<br>
+                🟤 Territorio afrodescendiente (cn)
+            </div>
+            """
+            m.get_root().html.add_child(folium.Element(leyenda_html))
             m.fit_bounds([[bounds[1], bounds[0]], [bounds[3], bounds[2]]])
-
             st_data = st_folium(m, width=1200, height=600)
 
-            # --- Mostrar tabla con resultados ---
             st.subheader("📋 Resultados filtrados")
-            st.dataframe(gdf_filtrado.drop(columns="geometry"))
+            columnas_mostrar = [col for col in gdf_filtrado.columns if col not in ["geometry", "area_formateada"]]
+            st.dataframe(gdf_filtrado[columnas_mostrar])
 
-            # --- Botón para descargar CSV ---
+            # Descargar CSV
             csv = gdf_filtrado.drop(columns="geometry").to_csv(index=False).encode("utf-8")
-            st.download_button(
-                label="⬇️ Descargar CSV de resultados",
-                data=csv,
-                file_name="resultados_filtrados.csv",
-                mime="text/csv"
+            st.download_button("⬇️ Descargar CSV de resultados", data=csv, file_name="resultados_filtrados.csv", mime="text/csv")
+            # --- Estadísticas ---
+            total_territorios = len(gdf_filtrado)
+            area_total = gdf_filtrado["area_ha"].sum()
+            hectareas = int(area_total)
+            metros2 = int(round((area_total - hectareas) * 10000))
+            cuenta_ci = (gdf_filtrado["cn_ci"] == "ci").sum()
+            cuenta_cn = (gdf_filtrado["cn_ci"] == "cn").sum()
+
+            st.markdown(
+                f"""
+                <div style='
+                    margin-top: 1em;
+                    padding: 0.7em;
+                    background-color: #e8f5e9;
+                    border-radius: 8px;
+                    font-size: 16px;
+                    color: #2e7d32;'>
+                    <strong>📊 Estadísticas del resultado:</strong><br>
+                    Territorios filtrados: <strong>{total_territorios}</strong><br>
+                    ▸ Comunidades indígenas (ci): <strong>{cuenta_ci}</strong><br>
+                    ▸ Consejos comunitarios (cn): <strong>{cuenta_cn}</strong><br>
+                    Área total: <strong>{hectareas} ha + {metros2:,} m²</strong>
+                </div>
+                """,
+                unsafe_allow_html=True
             )
 
-            # --- Botón para descargar Shapefile como ZIP ---
+
+            # Descargar SHP como ZIP
             with tempfile.TemporaryDirectory() as tmpdir:
                 zip_path = os.path.join(tmpdir, "shapefile_filtrado.zip")
                 shp_base = os.path.join(tmpdir, "shapefile_filtrado")
-                gdf_filtrado.to_file(shp_base + ".shp", driver="ESRI Shapefile", encoding="utf-8")
+                gdf_filtrado.drop(columns="area_formateada").to_file(shp_base + ".shp", driver="ESRI Shapefile", encoding="utf-8")
                 with zipfile.ZipFile(zip_path, "w") as zipf:
                     for ext in [".shp", ".shx", ".dbf", ".prj", ".cpg"]:
                         fpath = shp_base + ext
                         if os.path.exists(fpath):
                             zipf.write(fpath, arcname="shapefile_filtrado" + ext)
                 with open(zip_path, "rb") as f:
-                    st.download_button(
-                        label="⬇️ Descargar Shapefile filtrado (.zip)",
-                        data=f,
-                        file_name="shapefile_filtrado.zip",
-                        mime="application/zip"
-                    )
+                    st.download_button("⬇️ Descargar Shapefile filtrado (.zip)", data=f, file_name="shapefile_filtrado.zip", mime="application/zip")
 
-            # --- Exportar mapa a HTML ---
+            # Descargar HTML
             if st.sidebar.button("💾 Exportar mapa a HTML"):
                 with tempfile.NamedTemporaryFile(suffix=".html", delete=False) as tmpfile:
                     m.save(tmpfile.name)
                     st.success("✅ Mapa exportado correctamente.")
                     with open(tmpfile.name, "rb") as f:
-                        st.download_button(
-                            label="⬇️ Descargar HTML del mapa",
-                            data=f,
-                            file_name="mapa_etnico_filtrado.html",
-                            mime="text/html"
-                        )
+                        st.download_button("⬇️ Descargar HTML del mapa", data=f, file_name="mapa_etnico_filtrado.html", mime="text/html")
 
         else:
             st.warning("⚠️ No se encontraron resultados con los filtros aplicados.")
 
-# --- Créditos al pie ---
+# --- Créditos ---
 st.markdown("""---""")
 st.markdown(
     "<div style='text-align: center; font-size: 14px;'>"
