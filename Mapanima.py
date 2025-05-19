@@ -116,6 +116,15 @@ if not st.session_state["autenticado"]:
                 st.error("Usuario o contraseña incorrectos")
     st.stop()
 
+#!/usr/bin/env python
+# coding: utf-8
+
+# In[ ]:
+
+
+import streamlit as st
+st.set_page_config(page_title="Mapanima - Geovisor Étnico", layout="wide")
+
 # --- Estilo visual: tipografía, fondo, banner, leyenda ---
 
 st.markdown("""
@@ -175,16 +184,6 @@ st.markdown("""
         color: black;
         border-radius: 8px;
     }
-
-    /* Botones de descarga */
-    .stDownloadButton > button {
-    background-color: #ffffff;
-    color: #1b2e1b;
-    border: 1px solid #346b34;
-    border-radius: 6px;
-    font-weight: bold;
-    }
-    
     </style>
 """, unsafe_allow_html=True)
 
@@ -231,9 +230,39 @@ def cargar_shapefile_zip(uploaded_zip):
             return gpd.read_file(shp_path[0])
 
 # --- Subir archivo ---
-st.sidebar.header("📂 Cargar capa")
-zip_territorios = st.sidebar.file_uploader("Sube archivo .zip con SHP unificado", type="zip")
-gdf_total = cargar_shapefile_zip(zip_territorios)
+
+import requests
+from io import BytesIO
+
+# --- Convertir link corto de OneDrive a link de descarga directa ---
+def onedrive_a_directo(url_onedrive):
+    if "1drv.ms" in url_onedrive:
+        r = requests.get(url_onedrive, allow_redirects=True)
+        return r.url.replace("redir?", "download?").replace("redir=", "download=")
+    return url_onedrive
+
+# --- Descargar y cargar automáticamente el ZIP desde la URL transformada ---
+@st.cache_data
+def descargar_y_cargar_zip(url):
+    r = requests.get(url)
+    if r.status_code != 200:
+        st.error("❌ No se pudo descargar el archivo ZIP.")
+        return None
+    with zipfile.ZipFile(BytesIO(r.content)) as zip_ref:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            zip_ref.extractall(tmpdir)
+            shp_path = [os.path.join(tmpdir, f) for f in os.listdir(tmpdir) if f.endswith(".shp")]
+            if not shp_path:
+                st.error("❌ No se encontró ningún archivo .shp en el ZIP descargado.")
+                return None
+            return gpd.read_file(shp_path[0])
+
+# --- Ejecutar descarga automática desde secrets
+url_zip = onedrive_a_directo(st.secrets["URL_ZIP"])
+gdf_total = descargar_y_cargar_zip(url_zip)
+
+if gdf_total is not None:
+    st.success("✅ Capa cargada automáticamente desde fuente protegida.")
 
 # --- Si hay datos cargados ---
 if gdf_total is not None:
@@ -249,18 +278,6 @@ if gdf_total is not None:
     nombre_opciones = sorted(gdf_total['nom_terr'].dropna().unique())
     nombre_seleccionado = st.sidebar.selectbox("🔍 Buscar por nombre (nom_terr)", options=[""] + nombre_opciones)
     id_buscar = st.sidebar.text_input("🔍 Buscar por ID (id_rtdaf)")
-
-    
-    # --- Selector de fondo de mapa ---
-    fondos_disponibles = {
-        "OpenStreetMap": "OpenStreetMap",
-        "CartoDB Claro (Positron)": "CartoDB positron",
-        "CartoDB Oscuro": "CartoDB dark_matter",
-        "Satélite (Esri)": "Esri.WorldImagery",
-        "Esri NatGeo World Map": "Esri.NatGeoWorldMap",
-        "Esri World Topo Map": "Esri.WorldTopoMap"
-    }
-    fondo_seleccionado = st.sidebar.selectbox("🗺️ Fondo del mapa", list(fondos_disponibles.keys()), index=1)
 
     st.sidebar.header("⚙️ Rendimiento")
     usar_simplify = st.sidebar.checkbox("Simplificar geometría", value=True)
@@ -306,7 +323,7 @@ if gdf_total is not None:
             bounds = gdf_filtrado.total_bounds
             centro_lat = (bounds[1] + bounds[3]) / 2
             centro_lon = (bounds[0] + bounds[2]) / 2
-            m = folium.Map(location=[centro_lat, centro_lon], zoom_start=10, tiles=fondos_disponibles[fondo_seleccionado])
+            m = folium.Map(location=[centro_lat, centro_lon], zoom_start=10, tiles="CartoDB positron")
 
             def style_function_by_tipo(feature):
                 tipo = feature["properties"]["cn_ci"]
@@ -322,8 +339,8 @@ if gdf_total is not None:
                 gdf_filtrado,
                 style_function=style_function_by_tipo,
                 tooltip=folium.GeoJsonTooltip(
-                    fields=["id_rtdaf", "nom_terr", "etnia", "departamen", "municipio", "etapa", "estado_act", "tipologia", "area_formateada"],
-                    aliases=["ID:", "Territorio:", "Etnia:", "Departamento:", "Municipio:", "Etapa:", "Estado:", "Tipología:", "Área:"],
+                    fields=["id_rtdaf", "nom_terr", "etnia", "departamen", "municipio", "etapa", "estado_act", "area_formateada"],
+                    aliases=["ID:", "Territorio:", "Etnia:", "Departamento:", "Municipio:", "Etapa:", "Estado:", "Área:"],
                     localize=True
                 )
             ).add_to(m)
@@ -343,34 +360,6 @@ if gdf_total is not None:
 
             st.subheader("📋 Resultados filtrados")
             st.dataframe(gdf_filtrado.drop(columns=["geometry", "area_formateada"]))
-            # --- Estadísticas ---
-            total_territorios = len(gdf_filtrado)
-            area_total = gdf_filtrado["area_ha"].sum()
-            hectareas = int(area_total)
-            metros2 = int(round((area_total - hectareas) * 10000))
-            cuenta_ci = (gdf_filtrado["cn_ci"] == "ci").sum()
-            cuenta_cn = (gdf_filtrado["cn_ci"] == "cn").sum()
-
-            st.markdown(
-                f"""
-                <div style='
-                    margin-top: 1em;
-                    margin-bottom: 1.5em;
-                    padding: 0.7em;
-                    background-color: #e8f5e9;
-                    border-radius: 8px;
-                    font-size: 16px;
-                    color: #2e7d32;'>
-                    <strong>📊 Estadísticas del resultado:</strong><br>
-                    Territorios filtrados: <strong>{total_territorios}</strong><br>
-                    ▸ Comunidades indígenas (ci): <strong>{cuenta_ci}</strong><br>
-                    ▸ Consejos comunitarios (cn): <strong>{cuenta_cn}</strong><br>
-                    Área total: <strong>{hectareas} ha + {metros2:,} m²</strong>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
-
 
             # Descargar CSV
             csv = gdf_filtrado.drop(columns="geometry").to_csv(index=False).encode("utf-8")
@@ -390,12 +379,12 @@ if gdf_total is not None:
                     st.download_button("⬇️ Descargar Shapefile filtrado (.zip)", data=f, file_name="shapefile_filtrado.zip", mime="application/zip")
 
             # Descargar HTML
-            if st.sidebar.button("💾 Exportar mapa"):
+            if st.sidebar.button("💾 Exportar mapa a HTML"):
                 with tempfile.NamedTemporaryFile(suffix=".html", delete=False) as tmpfile:
                     m.save(tmpfile.name)
                     st.success("✅ Mapa exportado correctamente.")
                     with open(tmpfile.name, "rb") as f:
-                        st.download_button("⬇️ Descargar mapa", data=f, file_name="mapa_etnico_filtrado.html", mime="text/html")
+                        st.download_button("⬇️ Descargar HTML del mapa", data=f, file_name="mapa_etnico_filtrado.html", mime="text/html")
 
         else:
             st.warning("⚠️ No se encontraron resultados con los filtros aplicados.")
@@ -409,5 +398,3 @@ st.markdown(
     "</div>",
     unsafe_allow_html=True
 )
-
-
