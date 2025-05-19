@@ -7,23 +7,113 @@
 import streamlit as st
 st.set_page_config(page_title="Mapanima - Geovisor Étnico", layout="wide")
 
-
-# --- Login en sidebar ---
+# --- Página de bienvenida con login directo ---
 if "autenticado" not in st.session_state:
     st.session_state["autenticado"] = False
 
-with st.sidebar:
-    st.subheader("🔐 Acceso restringido")
-    usuario = st.text_input("Usuario")
-    contrasena = st.text_input("Contraseña", type="password")
-    if st.button("Ingresar"):
-        if usuario == st.secrets["USUARIO"] and contrasena == st.secrets["CONTRASENA"]:
-            st.session_state["autenticado"] = True
-        else:
-            st.error("Credenciales incorrectas")
-
 if not st.session_state["autenticado"]:
-    st.warning("Debes iniciar sesión para continuar.")
+    st.markdown("""
+    <style>
+    .stApp {
+        background-color: #1b2e1b;
+        color: white;
+        font-family: 'Inter', sans-serif;
+    }
+    .seccion {
+        padding: 2em;
+        text-align: center;
+    }
+    .texto-bienvenida {
+        font-size: 18px;
+        text-align: justify;
+        max-width: 900px;
+        margin: auto;
+    }
+    .fotos-container {
+        display: flex;
+        justify-content: center;
+        gap: 1em;
+        margin-top: 1em;
+    }
+    .fotos-container img {
+        width: 28%;
+        border-radius: 12px;
+        box-shadow: 0 0 8px rgba(255,255,255,0.2);
+    }
+    .areas-container {
+        display: flex;
+        justify-content: center;
+        gap: 1em;
+        margin-top: 2em;
+    }
+    .area {
+        background-color: #2a4a2a;
+        padding: 1em;
+        border-radius: 10px;
+        width: 28%;
+    }
+    input[type="text"], input[type="password"] {
+        background-color: #e8f5e9 !important;
+        color: #1b2e1b !important;
+        font-weight: bold;
+        border-radius: 8px;
+        height: 45px;
+        font-size: 16px;
+    }
+    label {
+        color: #c99c3b !important;
+        font-weight: bold;
+    }
+    button[kind="primary"] {
+        background-color: #c99c3b !important;
+        color: #1b2e1b !important;
+        font-weight: bold;
+        border-radius: 8px;
+        height: 45px;
+        font-size: 16px;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+    st.title("🌿 Mapanima")
+    st.image("GEOVISOR.png", use_container_width=True)
+
+    st.markdown("""
+    <div class='seccion texto-bienvenida'>
+        <p><strong>Mapanima</strong> es un visor étnico desarrollado para la Unidad de Restitución de Tierras, que representa el alma y la memoria territorial de los pueblos indígenas y comunidades negras de Colombia.</p>
+        <p>Su propósito es facilitar el análisis espacial de los procesos de restitución con una plataforma ligera, interactiva y respetuosa del carácter sagrado de la tierra.</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("""
+    <div class='fotos-container'>
+        <img src='https://upload.wikimedia.org/wikipedia/commons/thumb/f/f3/Amazonas_rainforest.jpg/640px-Amazonas_rainforest.jpg'>
+        <img src='https://upload.wikimedia.org/wikipedia/commons/thumb/7/7e/Territorio_indigena_Nasa.jpg/640px-Territorio_indigena_Nasa.jpg'>
+        <img src='https://upload.wikimedia.org/wikipedia/commons/thumb/1/1c/Community_mapping_workshop.jpg/640px-Community_mapping_workshop.jpg'>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("""
+    <div class='areas-container'>
+        <div class='area'><h4>Territorio</h4><p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Curabitur id fermentum justo.</p></div>
+        <div class='area'><h4>Memoria</h4><p>Vestibulum ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia.</p></div>
+        <div class='area'><h4>Cosmovisión</h4><p>Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque.</p></div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    with st.form("login_form", clear_on_submit=False):
+        usuario = st.text_input("Usuario")
+        contrasena = st.text_input("Contraseña", type="password")
+        submit = st.form_submit_button("🌍 Ingresar al visor")
+
+        if submit:
+            if usuario == st.secrets["USUARIO"] and contrasena == st.secrets["CONTRASENA"]:
+                st.session_state["autenticado"] = True
+                st.experimental_rerun()
+            else:
+                st.error("Usuario o contraseña incorrectos")
     st.stop()
 
 # --- Estilo visual: tipografía, fondo, banner, leyenda ---
@@ -85,6 +175,16 @@ st.markdown("""
         color: black;
         border-radius: 8px;
     }
+
+    /* Botones de descarga */
+    .stDownloadButton > button {
+    background-color: #ffffff;
+    color: #1b2e1b;
+    border: 1px solid #346b34;
+    border-radius: 6px;
+    font-weight: bold;
+    }
+    
     </style>
 """, unsafe_allow_html=True)
 
@@ -131,39 +231,9 @@ def cargar_shapefile_zip(uploaded_zip):
             return gpd.read_file(shp_path[0])
 
 # --- Subir archivo ---
-
-import requests
-from io import BytesIO
-
-# --- Convertir link corto de OneDrive a link de descarga directa ---
-def onedrive_a_directo(url_onedrive):
-    if "1drv.ms" in url_onedrive:
-        r = requests.get(url_onedrive, allow_redirects=True)
-        return r.url.replace("redir?", "download?").replace("redir=", "download=")
-    return url_onedrive
-
-# --- Descargar y cargar automáticamente el ZIP desde la URL transformada ---
-@st.cache_data
-def descargar_y_cargar_zip(url):
-    r = requests.get(url)
-    if r.status_code != 200:
-        st.error("❌ No se pudo descargar el archivo ZIP.")
-        return None
-    with zipfile.ZipFile(BytesIO(r.content)) as zip_ref:
-        with tempfile.TemporaryDirectory() as tmpdir:
-            zip_ref.extractall(tmpdir)
-            shp_path = [os.path.join(tmpdir, f) for f in os.listdir(tmpdir) if f.endswith(".shp")]
-            if not shp_path:
-                st.error("❌ No se encontró ningún archivo .shp en el ZIP descargado.")
-                return None
-            return gpd.read_file(shp_path[0])
-
-# --- Ejecutar descarga automática desde secrets
-url_zip = onedrive_a_directo(st.secrets["URL_ZIP"])
-gdf_total = descargar_y_cargar_zip(url_zip)
-
-if gdf_total is not None:
-    st.success("✅ Capa cargada automáticamente desde fuente protegida.")
+st.sidebar.header("📂 Cargar capa")
+zip_territorios = st.sidebar.file_uploader("Sube archivo .zip con SHP unificado", type="zip")
+gdf_total = cargar_shapefile_zip(zip_territorios)
 
 # --- Si hay datos cargados ---
 if gdf_total is not None:
@@ -179,6 +249,18 @@ if gdf_total is not None:
     nombre_opciones = sorted(gdf_total['nom_terr'].dropna().unique())
     nombre_seleccionado = st.sidebar.selectbox("🔍 Buscar por nombre (nom_terr)", options=[""] + nombre_opciones)
     id_buscar = st.sidebar.text_input("🔍 Buscar por ID (id_rtdaf)")
+
+    
+    # --- Selector de fondo de mapa ---
+    fondos_disponibles = {
+        "OpenStreetMap": "OpenStreetMap",
+        "CartoDB Claro (Positron)": "CartoDB positron",
+        "CartoDB Oscuro": "CartoDB dark_matter",
+        "Satélite (Esri)": "Esri.WorldImagery",
+        "Esri NatGeo World Map": "Esri.NatGeoWorldMap",
+        "Esri World Topo Map": "Esri.WorldTopoMap"
+    }
+    fondo_seleccionado = st.sidebar.selectbox("🗺️ Fondo del mapa", list(fondos_disponibles.keys()), index=1)
 
     st.sidebar.header("⚙️ Rendimiento")
     usar_simplify = st.sidebar.checkbox("Simplificar geometría", value=True)
@@ -224,7 +306,7 @@ if gdf_total is not None:
             bounds = gdf_filtrado.total_bounds
             centro_lat = (bounds[1] + bounds[3]) / 2
             centro_lon = (bounds[0] + bounds[2]) / 2
-            m = folium.Map(location=[centro_lat, centro_lon], zoom_start=10, tiles="CartoDB positron")
+            m = folium.Map(location=[centro_lat, centro_lon], zoom_start=10, tiles=fondos_disponibles[fondo_seleccionado])
 
             def style_function_by_tipo(feature):
                 tipo = feature["properties"]["cn_ci"]
@@ -240,8 +322,8 @@ if gdf_total is not None:
                 gdf_filtrado,
                 style_function=style_function_by_tipo,
                 tooltip=folium.GeoJsonTooltip(
-                    fields=["id_rtdaf", "nom_terr", "etnia", "departamen", "municipio", "etapa", "estado_act", "area_formateada"],
-                    aliases=["ID:", "Territorio:", "Etnia:", "Departamento:", "Municipio:", "Etapa:", "Estado:", "Área:"],
+                    fields=["id_rtdaf", "nom_terr", "etnia", "departamen", "municipio", "etapa", "estado_act", "tipologia", "area_formateada"],
+                    aliases=["ID:", "Territorio:", "Etnia:", "Departamento:", "Municipio:", "Etapa:", "Estado:", "Tipología:", "Área:"],
                     localize=True
                 )
             ).add_to(m)
@@ -261,6 +343,34 @@ if gdf_total is not None:
 
             st.subheader("📋 Resultados filtrados")
             st.dataframe(gdf_filtrado.drop(columns=["geometry", "area_formateada"]))
+            # --- Estadísticas ---
+            total_territorios = len(gdf_filtrado)
+            area_total = gdf_filtrado["area_ha"].sum()
+            hectareas = int(area_total)
+            metros2 = int(round((area_total - hectareas) * 10000))
+            cuenta_ci = (gdf_filtrado["cn_ci"] == "ci").sum()
+            cuenta_cn = (gdf_filtrado["cn_ci"] == "cn").sum()
+
+            st.markdown(
+                f"""
+                <div style='
+                    margin-top: 1em;
+                    margin-bottom: 1.5em;
+                    padding: 0.7em;
+                    background-color: #e8f5e9;
+                    border-radius: 8px;
+                    font-size: 16px;
+                    color: #2e7d32;'>
+                    <strong>📊 Estadísticas del resultado:</strong><br>
+                    Territorios filtrados: <strong>{total_territorios}</strong><br>
+                    ▸ Comunidades indígenas (ci): <strong>{cuenta_ci}</strong><br>
+                    ▸ Consejos comunitarios (cn): <strong>{cuenta_cn}</strong><br>
+                    Área total: <strong>{hectareas} ha + {metros2:,} m²</strong>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+
 
             # Descargar CSV
             csv = gdf_filtrado.drop(columns="geometry").to_csv(index=False).encode("utf-8")
@@ -280,12 +390,12 @@ if gdf_total is not None:
                     st.download_button("⬇️ Descargar Shapefile filtrado (.zip)", data=f, file_name="shapefile_filtrado.zip", mime="application/zip")
 
             # Descargar HTML
-            if st.sidebar.button("💾 Exportar mapa a HTML"):
+            if st.sidebar.button("💾 Exportar mapa"):
                 with tempfile.NamedTemporaryFile(suffix=".html", delete=False) as tmpfile:
                     m.save(tmpfile.name)
                     st.success("✅ Mapa exportado correctamente.")
                     with open(tmpfile.name, "rb") as f:
-                        st.download_button("⬇️ Descargar HTML del mapa", data=f, file_name="mapa_etnico_filtrado.html", mime="text/html")
+                        st.download_button("⬇️ Descargar mapa", data=f, file_name="mapa_etnico_filtrado.html", mime="text/html")
 
         else:
             st.warning("⚠️ No se encontraron resultados con los filtros aplicados.")
@@ -299,4 +409,5 @@ st.markdown(
     "</div>",
     unsafe_allow_html=True
 )
+
 
