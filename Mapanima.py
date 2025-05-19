@@ -79,7 +79,7 @@ if not st.session_state["autenticado"]:
 
     st.markdown("""
     <div class='seccion texto-bienvenida'>
-        <p><strong>Mapanima</strong> es un visor étnico desarrollado para la Unidad de Restitución de Tierras, que representa el alma y la memoria territorial de los pueblos indígenas y comunidades negras de Colombia.</p>
+        <p><strong>Mapanima</strong> Es un visor étnico desarrollado para la Unidad de Restitución de Tierras, que representa el alma y la memoria territorial de los pueblos indígenas y comunidades negras de Colombia.</p>
         <p>Su propósito es facilitar el análisis espacial de los procesos de restitución con una plataforma ligera, interactiva y respetuosa del carácter sagrado de la tierra.</p>
     </div>
     """, unsafe_allow_html=True)
