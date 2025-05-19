@@ -53,18 +53,24 @@ if not st.session_state["autenticado"]:
         width: 28%;
     }
     input[type="text"], input[type="password"] {
-  	background-color: #e8f5e9 !important;
-    	color: #1b2e1b !important;
-    	font-weight: bold;
+        background-color: #e8f5e9 !important;
+        color: #1b2e1b !important;
+        font-weight: bold;
+        border-radius: 8px;
+        height: 45px;
+        font-size: 16px;
+    }
+    label {
+        color: #c99c3b !important;
+        font-weight: bold;
     }
     button[kind="primary"] {
-    	background-color: #e8f5e9 !important;
-  	color: #1b2e1b !important;
-   	font-weight: bold;
-   	width: 100%;
-    }
-    .st-bf {
-   	width: 100% !important;
+        background-color: #c99c3b !important;
+        color: #1b2e1b !important;
+        font-weight: bold;
+        border-radius: 8px;
+        height: 45px;
+        font-size: 16px;
     }
     </style>
     """, unsafe_allow_html=True)
