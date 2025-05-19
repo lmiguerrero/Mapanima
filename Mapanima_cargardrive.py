@@ -7,25 +7,6 @@
 import streamlit as st
 st.set_page_config(page_title="Mapanima - Geovisor Étnico", layout="wide")
 
-
-# --- Login en sidebar ---
-if "autenticado" not in st.session_state:
-    st.session_state["autenticado"] = False
-
-with st.sidebar:
-    st.subheader("🔐 Acceso restringido")
-    usuario = st.text_input("Usuario")
-    contrasena = st.text_input("Contraseña", type="password")
-    if st.button("Ingresar"):
-        if usuario == st.secrets["USUARIO"] and contrasena == st.secrets["CONTRASENA"]:
-            st.session_state["autenticado"] = True
-        else:
-            st.error("Credenciales incorrectas")
-
-if not st.session_state["autenticado"]:
-    st.warning("Debes iniciar sesión para continuar.")
-    st.stop()
-
 # --- Estilo visual: tipografía, fondo, banner, leyenda ---
 
 st.markdown("""
@@ -131,39 +112,9 @@ def cargar_shapefile_zip(uploaded_zip):
             return gpd.read_file(shp_path[0])
 
 # --- Subir archivo ---
-
-import requests
-from io import BytesIO
-
-# --- Convertir link corto de OneDrive a link de descarga directa ---
-def onedrive_a_directo(url_onedrive):
-    if "1drv.ms" in url_onedrive:
-        r = requests.get(url_onedrive, allow_redirects=True)
-        return r.url.replace("redir?", "download?").replace("redir=", "download=")
-    return url_onedrive
-
-# --- Descargar y cargar automáticamente el ZIP desde la URL transformada ---
-@st.cache_data
-def descargar_y_cargar_zip(url):
-    r = requests.get(url)
-    if r.status_code != 200:
-        st.error("❌ No se pudo descargar el archivo ZIP.")
-        return None
-    with zipfile.ZipFile(BytesIO(r.content)) as zip_ref:
-        with tempfile.TemporaryDirectory() as tmpdir:
-            zip_ref.extractall(tmpdir)
-            shp_path = [os.path.join(tmpdir, f) for f in os.listdir(tmpdir) if f.endswith(".shp")]
-            if not shp_path:
-                st.error("❌ No se encontró ningún archivo .shp en el ZIP descargado.")
-                return None
-            return gpd.read_file(shp_path[0])
-
-# --- Ejecutar descarga automática desde secrets
-url_zip = onedrive_a_directo(st.secrets["URL_ZIP"])
-gdf_total = descargar_y_cargar_zip(url_zip)
-
-if gdf_total is not None:
-    st.success("✅ Capa cargada automáticamente desde fuente protegida.")
+st.sidebar.header("📂 Cargar capa")
+zip_territorios = st.sidebar.file_uploader("Sube archivo .zip con SHP unificado", type="zip")
+gdf_total = cargar_shapefile_zip(zip_territorios)
 
 # --- Si hay datos cargados ---
 if gdf_total is not None:
