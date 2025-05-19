@@ -5,7 +5,6 @@
 
 
 import streamlit as st
-st.set_page_config(page_title="Mapanima - Geovisor Étnico", layout="wide")
 
 # --- Página de bienvenida con login directo ---
 if "autenticado" not in st.session_state:
@@ -111,7 +110,7 @@ if not st.session_state["autenticado"]:
         if submit:
             if usuario == st.secrets["USUARIO"] and contrasena == st.secrets["CONTRASENA"]:
                 st.session_state["autenticado"] = True
-                st.rerun()
+                st.experimental_rerun()
             else:
                 st.error("Usuario o contraseña incorrectos")
     st.stop()
@@ -233,6 +232,7 @@ def cargar_shapefile_zip(uploaded_zip):
 
 import requests
 from io import BytesIO
+st.set_page_config(page_title="Mapanima - Geovisor Étnico", layout="wide")
 
 # --- Convertir link corto de OneDrive a link de descarga directa ---
 def onedrive_a_directo(url_onedrive):
