@@ -140,9 +140,57 @@ def cargar_shapefile_zip(uploaded_zip):
             return gpd.read_file(shp_path[0])
 
 # --- Subir archivo ---
-st.sidebar.header("📂 Cargar capa")
-zip_territorios = st.sidebar.file_uploader("Sube archivo .zip con SHP unificado", type="zip")
-gdf_total = cargar_shapefile_zip(zip_territorios)
+import requests
+from io import BytesIO
+
+# --- Autenticación segura usando secrets ---
+usuario_valido = st.secrets["USUARIO"]
+contrasena_valida = st.secrets["CONTRASENA"]
+
+def login():
+    st.sidebar.header("🔐 Acceso restringido")
+    usuario = st.sidebar.text_input("Usuario")
+    contrasena = st.sidebar.text_input("Contraseña", type="password")
+    if st.sidebar.button("Ingresar"):
+        if usuario == usuario_valido and contrasena == contrasena_valida:
+            st.session_state["autenticado"] = True
+        else:
+            st.error("Usuario o contraseña incorrectos")
+
+if "autenticado" not in st.session_state or not st.session_state["autenticado"]:
+    login()
+    st.stop()
+
+# --- Convertir link corto de OneDrive a link de descarga directa ---
+def onedrive_a_directo(url_onedrive):
+    if "1drv.ms" in url_onedrive:
+        r = requests.get(url_onedrive, allow_redirects=True)
+        return r.url.replace("redir?", "download?").replace("redir=", "download=")
+    return url_onedrive
+
+# --- Descargar y cargar automáticamente el ZIP desde la URL transformada ---
+@st.cache_data
+def descargar_y_cargar_zip(url):
+    r = requests.get(url)
+    if r.status_code != 200:
+        st.error("❌ No se pudo descargar el archivo ZIP.")
+        return None
+    with zipfile.ZipFile(BytesIO(r.content)) as zip_ref:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            zip_ref.extractall(tmpdir)
+            shp_path = [os.path.join(tmpdir, f) for f in os.listdir(tmpdir) if f.endswith(".shp")]
+            if not shp_path:
+                st.error("❌ No se encontró ningún archivo .shp en el ZIP descargado.")
+                return None
+            return gpd.read_file(shp_path[0])
+
+# --- Ejecutar todo ---
+url_zip = onedrive_a_directo(st.secrets["URL_ZIP"])
+gdf_total = descargar_y_cargar_zip(url_zip)
+
+# --- Mensaje de carga exitosa ---
+if gdf_total is not None:
+    st.success("✅ Capa cargada automáticamente desde fuente protegida.")
 
 # --- Si hay datos cargados ---
 if gdf_total is not None:
