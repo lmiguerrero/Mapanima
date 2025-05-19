@@ -52,9 +52,19 @@ if not st.session_state["autenticado"]:
         border-radius: 10px;
         width: 28%;
     }
-    .login-form {
-        text-align: center;
-        margin-top: 2em;
+    input[type="text"], input[type="password"] {
+  	background-color: #e8f5e9 !important;
+    	color: #1b2e1b !important;
+    	font-weight: bold;
+    }
+    button[kind="primary"] {
+    	background-color: #e8f5e9 !important;
+  	color: #1b2e1b !important;
+   	font-weight: bold;
+   	width: 100%;
+    }
+    .st-bf {
+   	width: 100% !important;
     }
     </style>
     """, unsafe_allow_html=True)
