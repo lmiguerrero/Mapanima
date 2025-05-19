@@ -7,11 +7,11 @@
 import streamlit as st
 st.set_page_config(page_title="Mapanima - Geovisor Étnico", layout="wide")
 
-# --- Página de bienvenida personalizada ---
-if "bienvenida" not in st.session_state:
-    st.session_state["bienvenida"] = True
+# --- Página de bienvenida con login directo ---
+if "autenticado" not in st.session_state:
+    st.session_state["autenticado"] = False
 
-if st.session_state["bienvenida"]:
+if not st.session_state["autenticado"]:
     st.markdown("""
     <style>
     .stApp {
@@ -52,11 +52,15 @@ if st.session_state["bienvenida"]:
         border-radius: 10px;
         width: 28%;
     }
+    .login-form {
+        text-align: center;
+        margin-top: 2em;
+    }
     </style>
     """, unsafe_allow_html=True)
 
     st.title("🌿 Mapanima")
-    st.image("GEOVISOR.png", use_column_width=True)
+    st.image("GEOVISOR.png", use_container_width=True)
 
     st.markdown("""
     <div class='seccion texto-bienvenida'>
@@ -82,8 +86,18 @@ if st.session_state["bienvenida"]:
     """, unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
-    if st.button("🌍 Ingresar al visor"):
-        st.session_state["bienvenida"] = False
+
+    with st.form("login_form", clear_on_submit=False):
+        usuario = st.text_input("Usuario")
+        contrasena = st.text_input("Contraseña", type="password")
+        submit = st.form_submit_button("🌍 Ingresar al visor")
+
+        if submit:
+            if usuario == st.secrets["USUARIO"] and contrasena == st.secrets["CONTRASENA"]:
+                st.session_state["autenticado"] = True
+                st.experimental_rerun()
+            else:
+                st.error("Usuario o contraseña incorrectos")
     st.stop()
 
 # --- Estilo visual: tipografía, fondo, banner, leyenda ---
@@ -175,6 +189,18 @@ with st.container():
 
 # --- Título e introducción ---
 st.title("🗺️ Mapanima - Geovisor Étnico")
+with st.expander("🧭 ¿Qué es Mapanima?"):
+    st.markdown(
+        """
+        <div style='font-size:16px; text-align:justify;'>
+        <strong>Mapanima</strong> nace de la fusión entre “mapa” y “ánima”, evocando no solo la representación gráfica de un territorio, sino su alma, su energía viva.<br><br>
+        Este nombre es una metáfora del territorio étnico, entendido no como una extensión vacía delimitada por coordenadas, sino como un espacio sagrado, habitado, sentido y narrado por los pueblos originarios.<br><br>
+        <strong>Mapanima</strong> honra la cosmovisión indígena donde la tierra tiene memoria, espíritu y dignidad.
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
 # --- Cargar ZIP con shapefile ---
 def cargar_shapefile_zip(uploaded_zip):
     if not uploaded_zip:
