@@ -111,7 +111,7 @@ if not st.session_state["autenticado"]:
         if submit:
             if usuario == st.secrets["USUARIO"] and contrasena == st.secrets["CONTRASENA"]:
                 st.session_state["autenticado"] = True
-                st.experimental_rerun()
+                st.rerun()
             else:
                 st.error("Usuario o contraseña incorrectos")
     st.stop()
