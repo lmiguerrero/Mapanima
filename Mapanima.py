@@ -14,76 +14,72 @@ from streamlit_folium import st_folium
 
 st.set_page_config(page_title="Mapanima - Geovisor Étnico", layout="wide")
 
-# --- Autenticación segura con estilo institucional ---
+# --- Autenticación segura con bienvenida institucional sencilla ---
 usuario_valido = st.secrets["USUARIO"]
 contrasena_valida = st.secrets["CONTRASENA"]
 
 def login():
     st.markdown("""
-        <style>
-        .contenedor-login {
-            display: flex;
-            flex-direction: row;
-            height: 100vh;
-            width: 100%;
-            background-color: #1b2e1b;
-        }
-        .login-formulario {
-            flex: 1;
-            padding: 3em;
-            background-color: #c99c3b;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            color: black;
-        }
-        .login-bienvenida {
-            flex: 1;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 2em;
-            color: white;
-        }
-        .login-bienvenida-texto {
-            text-align: center;
-            max-width: 500px;
-        }
-        .login-bienvenida-texto h2 {
-            font-size: 2.5em;
-            margin-bottom: 0.5em;
-            color: #ffffff;
-        }
-        .login-bienvenida-texto p {
-            font-size: 1.1em;
-            color: #cccccc;
-        }
-        </style>
-        <div class="contenedor-login">
-            <div class="login-formulario">
+    <style>
+    .login-container {
+        display: flex;
+        width: 100%;
+        height: 100vh;
+        background-color: #1b2e1b;
+        font-family: 'Inter', sans-serif;
+    }
+    .login-left {
+        background-color: #c99c3b;
+        padding: 3em;
+        flex: 1;
+        color: black;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+    }
+    .login-right {
+        flex: 1;
+        padding: 3em;
+        color: white;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        text-align: center;
+    }
+    .login-right img {
+        max-width: 300px;
+        margin-bottom: 1.5em;
+        border-radius: 10px;
+        border: 2px solid #c99c3b;
+    }
+    .login-right p {
+        font-size: 1.1em;
+        line-height: 1.6em;
+        max-width: 500px;
+    }
+    </style>
+    <div class="login-container">
+        <div class="login-left">
     """, unsafe_allow_html=True)
 
-    st.sidebar.header("🔐 Acceso restringido")
-    usuario = st.sidebar.text_input("Usuario")
-    contrasena = st.sidebar.text_input("Contraseña", type="password")
-    if st.sidebar.button("Ingresar"):
+    st.subheader("🔐 Acceso restringido")
+    usuario = st.text_input("Usuario")
+    contrasena = st.text_input("Contraseña", type="password")
+    if st.button("Ingresar"):
         if usuario.strip().upper() == usuario_valido.strip().upper() and contrasena.strip() == contrasena_valida.strip():
             st.session_state["autenticado"] = True
         else:
             st.error("Usuario o contraseña incorrectos")
 
     st.markdown("""
-            </div>
-            <div class="login-bienvenida">
-                <div class="login-bienvenida-texto">
-                    <h2>Bienvenido a Mapanima</h2>
-                    <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. 
-                    Este visor permite explorar los territorios étnicos reconstruidos 
-                    por la Dirección de Asuntos Étnicos de la URT.</p>
-                    <p><em>Ingresa con tu usuario para continuar.</em></p>
-                </div>
-            </div>
         </div>
+        <div class="login-right">
+            <img src="https://upload.wikimedia.org/wikipedia/commons/3/35/Mapa_del_territorio_Embera.jpg">
+            <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Este visor permite explorar los territorios étnicos reconstruidos por la Dirección de Asuntos Étnicos de la URT.</p>
+            <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/3/3c/Flag_of_the_Embera_people.svg/1024px-Flag_of_the_Embera_people.svg.png">
+        </div>
+    </div>
     """, unsafe_allow_html=True)
 
 if "autenticado" not in st.session_state or not st.session_state["autenticado"]:
@@ -115,7 +111,11 @@ def onedrive_a_directo(url_onedrive):
 url_zip = onedrive_a_directo(st.secrets["URL_ZIP"])
 gdf_total = descargar_y_cargar_zip(url_zip)
 
-# --- Estilo visual institucional del visor ---
+# --- Banner institucional como imagen superior ---
+with st.container():
+    st.image("GEOVISOR.png", use_container_width=True)
+
+# --- Estilo institucional general ---
 st.markdown("""
     <style>
     html, body, .stApp {
@@ -168,11 +168,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- Banner institucional como imagen superior ---
-with st.container():
-    st.image("GEOVISOR.png", use_container_width=True)
-
-# --- Si hay datos cargados ---
+# --- Resto del visor se activa si hay datos cargados ---
 if gdf_total is not None:
     gdf_total['etapa'] = gdf_total['etapa'].str.lower()
     gdf_total['estado_act'] = gdf_total['estado_act'].str.strip()
@@ -187,8 +183,6 @@ if gdf_total is not None:
     nombre_seleccionado = st.sidebar.selectbox("🔍 Buscar por nombre (nom_terr)", options=[""] + nombre_opciones)
     id_buscar = st.sidebar.text_input("🔍 Buscar por ID (id_rtdaf)")
 
-    
-    # --- Selector de fondo de mapa ---
     fondos_disponibles = {
         "OpenStreetMap": "OpenStreetMap",
         "CartoDB Claro (Positron)": "CartoDB positron",
@@ -214,6 +208,7 @@ if gdf_total is not None:
         if st.button("🔄 Reiniciar visor"):
             st.session_state["mostrar_mapa"] = False
             st.rerun()
+
     if st.session_state["mostrar_mapa"]:
         gdf_filtrado = gdf_total.copy()
         if etapa_sel:
@@ -234,11 +229,9 @@ if gdf_total is not None:
         st.subheader("🗺️ Mapa filtrado")
 
         if not gdf_filtrado.empty:
-            # Calcular área formateada
             gdf_filtrado["area_formateada"] = gdf_filtrado["area_ha"].apply(
                 lambda ha: f"{int(ha)} ha + {int(round((ha - int(ha)) * 10000)):,} m²"
             )
-
             gdf_filtrado = gdf_filtrado.to_crs(epsg=4326)
             bounds = gdf_filtrado.total_bounds
             centro_lat = (bounds[1] + bounds[3]) / 2
@@ -248,12 +241,7 @@ if gdf_total is not None:
             def style_function_by_tipo(feature):
                 tipo = feature["properties"]["cn_ci"]
                 color = "#228B22" if tipo == "ci" else "#8B4513"
-                return {
-                    "fillColor": color,
-                    "color": color,
-                    "weight": 1,
-                    "fillOpacity": 0.6
-                }
+                return {"fillColor": color, "color": color, "weight": 1, "fillOpacity": 0.6}
 
             folium.GeoJson(
                 gdf_filtrado,
@@ -276,66 +264,10 @@ if gdf_total is not None:
             """
             m.get_root().html.add_child(folium.Element(leyenda_html))
             m.fit_bounds([[bounds[1], bounds[0]], [bounds[3], bounds[2]]])
-            st_data = st_folium(m, width=1200, height=600)
+            st_folium(m, width=1200, height=600)
 
             st.subheader("📋 Resultados filtrados")
             st.dataframe(gdf_filtrado.drop(columns=["geometry", "area_formateada"]))
-            # --- Estadísticas ---
-            total_territorios = len(gdf_filtrado)
-            area_total = gdf_filtrado["area_ha"].sum()
-            hectareas = int(area_total)
-            metros2 = int(round((area_total - hectareas) * 10000))
-            cuenta_ci = (gdf_filtrado["cn_ci"] == "ci").sum()
-            cuenta_cn = (gdf_filtrado["cn_ci"] == "cn").sum()
-
-            st.markdown(
-                f"""
-                <div style='
-                    margin-top: 1em;
-                    margin-bottom: 1.5em;
-                    padding: 0.7em;
-                    background-color: #e8f5e9;
-                    border-radius: 8px;
-                    font-size: 16px;
-                    color: #2e7d32;'>
-                    <strong>📊 Estadísticas del resultado:</strong><br>
-                    Territorios filtrados: <strong>{total_territorios}</strong><br>
-                    ▸ Comunidades indígenas (ci): <strong>{cuenta_ci}</strong><br>
-                    ▸ Consejos comunitarios (cn): <strong>{cuenta_cn}</strong><br>
-                    Área total: <strong>{hectareas} ha + {metros2:,} m²</strong>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
-
-
-            # Descargar CSV
-            csv = gdf_filtrado.drop(columns="geometry").to_csv(index=False).encode("utf-8")
-            st.download_button("⬇️ Descargar CSV de resultados", data=csv, file_name="resultados_filtrados.csv", mime="text/csv")
-
-            # Descargar SHP como ZIP
-            with tempfile.TemporaryDirectory() as tmpdir:
-                zip_path = os.path.join(tmpdir, "shapefile_filtrado.zip")
-                shp_base = os.path.join(tmpdir, "shapefile_filtrado")
-                gdf_filtrado.drop(columns="area_formateada").to_file(shp_base + ".shp", driver="ESRI Shapefile", encoding="utf-8")
-                with zipfile.ZipFile(zip_path, "w") as zipf:
-                    for ext in [".shp", ".shx", ".dbf", ".prj", ".cpg"]:
-                        fpath = shp_base + ext
-                        if os.path.exists(fpath):
-                            zipf.write(fpath, arcname="shapefile_filtrado" + ext)
-                with open(zip_path, "rb") as f:
-                    st.download_button("⬇️ Descargar Shapefile filtrado (.zip)", data=f, file_name="shapefile_filtrado.zip", mime="application/zip")
-
-            # Descargar HTML
-            if st.sidebar.button("💾 Exportar mapa"):
-                with tempfile.NamedTemporaryFile(suffix=".html", delete=False) as tmpfile:
-                    m.save(tmpfile.name)
-                    st.success("✅ Mapa exportado correctamente.")
-                    with open(tmpfile.name, "rb") as f:
-                        st.download_button("⬇️ Descargar mapa", data=f, file_name="mapa_etnico_filtrado.html", mime="text/html")
-
-        else:
-            st.warning("⚠️ No se encontraron resultados con los filtros aplicados.")
 
 # --- Créditos ---
 st.markdown("""---""")
@@ -346,5 +278,3 @@ st.markdown(
     "</div>",
     unsafe_allow_html=True
 )
-
-
