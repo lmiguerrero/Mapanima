@@ -115,8 +115,10 @@ if "autenticado" not in st.session_state or not st.session_state["autenticado"]:
         st.image("GEOVISOR.png", use_container_width=True)
         st.markdown("""
             <div style='padding-top: 1em; font-size: 16px; color: white; text-align: justify;'>
-                Bienvenido al visor <strong>Mapanima</strong>. Esta plataforma permite consultar y visualizar los territorios étnicos
-                reconstruidos por el equipo de la Dirección de Asuntos Étnicos de la URT, brindando herramientas técnicas para el análisis espacial de los procesos.
+                Bienvenido al visor <strong>Mapanima</strong>. Mapanima nace de la fusión entre “mapa” y “ánima”, evocando no solo la representación gráfica de un territorio, sino su alma, su energía viva. 
+                Este nombre es una metáfora del territorio, comprendido no como una extensión vacía delimitada por coordenadas, sino como un espacio sagrado, habitado, sentido y narrado por los pueblos originarios.
+                Mapanima honra la cosmovisión etnica, donde la tierra tiene memoria, espíritu y dignidad; donde cada río, montaña y sendero guarda historias ancestrales. 
+                Así, este visor no solo muestra información geográfica: revela un territorio vivo, que respira y se defiende.
             </div>
         """, unsafe_allow_html=True)
 
