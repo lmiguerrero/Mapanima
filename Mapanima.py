@@ -101,7 +101,7 @@ if "autenticado" not in st.session_state or not st.session_state["autenticado"]:
                 st.error("Usuario o contraseña incorrectos")
 
     with col2:
-        st.image("GEOVISOR.png", use_column_width=True)
+        st.image("GEOVISOR.png", use_container_width=True)
 
     st.stop()
 # --- Carga ZIP remoto desde OneDrive ---
