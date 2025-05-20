@@ -87,10 +87,10 @@ usuario_valido = st.secrets["USUARIO"]
 contrasena_valida = st.secrets["CONTRASENA"]
 
 if "autenticado" not in st.session_state or not st.session_state["autenticado"]:
-    col1, col2 = st.columns([1, 2])
+    col1, col2 = st.columns([1, 2], gap="large")
+
     with col1:
-        st.markdown('<div class="login-left">', unsafe_allow_html=True)
-        st.header("🔐 Acceso restringido")
+        st.markdown("<h2>🔐 Acceso restringido</h2>", unsafe_allow_html=True)
         usuario = st.text_input("Usuario")
         contrasena = st.text_input("Contraseña", type="password")
         if st.button("Ingresar"):
@@ -99,11 +99,10 @@ if "autenticado" not in st.session_state or not st.session_state["autenticado"]:
                 st.rerun()
             else:
                 st.error("Usuario o contraseña incorrectos")
-        st.markdown('</div>', unsafe_allow_html=True)
+
     with col2:
-        st.markdown('<div class="login-right">', unsafe_allow_html=True)
-        st.image("GEOVISOR.png")
-        st.markdown('</div>', unsafe_allow_html=True)
+        st.image("GEOVISOR.png", use_column_width=True)
+
     st.stop()
 # --- Carga ZIP remoto desde OneDrive ---
 @st.cache_data
