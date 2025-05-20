@@ -278,7 +278,7 @@ if gdf_total is not None:
                 ''',
                 unsafe_allow_html=True
             )
-            with st.expander("📅 Opciones de descarga"):
+            with st.expander("📥 Opciones de descarga"):
                 # Descargar shapefile filtrado como ZIP
                 with tempfile.TemporaryDirectory() as tmpdir:
                     shp_path = os.path.join(tmpdir, "territorios.shp")
@@ -292,22 +292,22 @@ if gdf_total is not None:
                             mime="application/zip"
                         )
 
-    # Descargar mapa como HTML
-            html_bytes = m.get_root().render().encode("utf-8")
-            st.download_button(
-                label="🌐 Descargar mapa HTML",
-                data=html_bytes,
-                file_name="mapa_filtrado.html",
-                mime="text/html"
-            )
+                # Descargar mapa como HTML
+                html_bytes = m.get_root().render().encode("utf-8")
+                st.download_button(
+                    label="🌐 Descargar mapa HTML",
+                    data=html_bytes,
+                    file_name="mapa_filtrado.html",
+                    mime="text/html"
+                )
 
-    # Descargar resultados como CSV
-    csv_data = gdf_filtrado.drop(columns=["geometry"]).to_csv(index=False).encode("utf-8")
-    st.download_button(
-        label="📄 Descargar tabla como CSV",
-        data=csv_data,
-        file_name="resultados_filtrados.csv",
-        mime="text/csv"
-    )
+                # Descargar resultados como CSV
+                csv_data = gdf_filtrado.drop(columns=["geometry"]).to_csv(index=False).encode("utf-8")
+                st.download_button(
+                    label="📄 Descargar tabla como CSV",
+                    data=csv_data,
+                    file_name="resultados_filtrados.csv",
+                    mime="text/csv"
+                )
 
 
