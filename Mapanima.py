@@ -134,7 +134,7 @@ if "autenticado" not in st.session_state or not st.session_state["autenticado"]:
         </div>
         """, unsafe_allow_html=True)
 
-        st.image("GEOVISOR.png", use_column_width=False, width=200)
+        st.image("GEOVISOR.png", use_container_width=False, width=200)
 
     st.stop()
 
