@@ -113,27 +113,29 @@ if "autenticado" not in st.session_state or not st.session_state["autenticado"]:
 
     with col2:
         st.image("GEOVISOR.png", use_container_width=True)
+        
         st.markdown("""
-            <div style='padding-top: 1em; font-size: 16px; color: white; text-align: justify;'>
-                <p>
-                Bienvenido al visor <strong>Mapanima</strong>. Mapanima nace de la fusión entre “mapa” y “ánima”, evocando no solo la representación gráfica de un territorio, sino su alma, su energía viva.
-                </p>
+        <div style='padding-top: 1em; font-size: 16px; color: white; text-align: justify;'>
+            <p>
+             Bienvenido al visor <strong>Mapanima</strong>. Mapanima nace de la fusión entre “mapa” y “ánima”, evocando no solo la representación gráfica de un territorio, sino su alma, su energía viva.
+            </p>
 
-                <p>
-                Este nombre es una metáfora del territorio, comprendido no como una extensión vacía delimitada por coordenadas, sino como un espacio sagrado, habitado, sentido y narrado por los pueblos originarios.
-                </p>
+            <p>
+            Este nombre es una metáfora del territorio, comprendido no como una extensión vacía delimitada por coordenadas, sino como un espacio sagrado, habitado, sentido y narrado por los pueblos originarios.
+            </p>
 
-                <p>
-                Mapanima honra la cosmovisión étnica, donde la tierra tiene memoria, espíritu y dignidad; donde cada río, montaña y sendero guarda historias ancestrales. Así, este visor no solo muestra información geográfica: revela un territorio vivo, que respira y se defiende.
-                </p>
+            <p>
+            Mapanima honra la cosmovisión étnica, donde la tierra tiene memoria, espíritu y dignidad; donde cada río, montaña y sendero guarda historias ancestrales. Así, este visor no solo muestra información geográfica: revela un territorio vivo, que respira y se defiende.
+            </p>
 
-                <p style='margin-top: 2em; font-style: italic; color: #b0c9a8;'>
-                Desarrollo del equipo de Geoanálisis Étnico – DAE<br>
-                Unidad de Restitución de Tierras
-                </p>
+            <p style='margin-top: 2em; font-style: italic; color: #b0c9a8;'>
+            Desarrollo del equipo de Geoanálisis Étnico – DAE<br>
+            Unidad de Restitución de Tierras
+            </p>
         </div>
         """, unsafe_allow_html=True)
-
+        
+        st.markdown("<div style='margin-top: 1em;'></div>", unsafe_allow_html=True)
         st.image("GEOVISOR.png", use_container_width=False, width=200)
 
     st.stop()
