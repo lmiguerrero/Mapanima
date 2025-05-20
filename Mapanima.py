@@ -8,6 +8,7 @@ import tempfile
 import os
 import folium
 import requests
+import shutil
 from io import BytesIO
 from streamlit_folium import st_folium
 
