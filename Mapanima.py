@@ -112,7 +112,7 @@ if "autenticado" not in st.session_state or not st.session_state["autenticado"]:
                 st.error("Usuario o contraseña incorrectos")
 
     with col2:
-        st.image("BANNER_LOGIN.png", use_container_width=True)  # Puedes cambiar el banner si quieres
+        st.image("GEOVISOR.png", use_container_width=True)
         st.markdown("""
             <div style='padding-top: 1em; font-size: 16px; color: white; text-align: justify;'>
                 <p>
@@ -134,7 +134,7 @@ if "autenticado" not in st.session_state or not st.session_state["autenticado"]:
         </div>
         """, unsafe_allow_html=True)
 
-        st.image("logo_urt.png", use_column_width=False, width=200)
+        st.image("GEOVISOR.png", use_column_width=False, width=200)
 
     st.stop()
 
