@@ -1,5 +1,5 @@
 # --- VERSION FINAL 21/05/2025 ---
-# --- ULTIMA IMPLEMENTACION - CONTORNOS Y CAPA DE FONDO ANT (FIX AREA_HA) ---
+# --- ULTIMA IMPLEMENTACION - CONTORNOS ---
 # --- Miguel Guerrero ---
 
 import streamlit as st
@@ -140,55 +140,21 @@ if "autenticado" not in st.session_state or not st.session_state["autenticado"]:
 
     st.stop()
 
-# --- Función para descargar y cargar archivos ZIP de shapefiles ---
+# --- Carga ZIP remoto desde OneDrive ---
 @st.cache_data
 def descargar_y_cargar_zip(url):
-    try:
-        r = requests.get(url)
-        r.raise_for_status() # Lanza una excepción para errores HTTP
-        with zipfile.ZipFile(BytesIO(r.content)) as zip_ref:
-            with tempfile.TemporaryDirectory() as tmpdir:
-                zip_ref.extractall(tmpdir)
-                shp_path = [os.path.join(tmpdir, f) for f in os.listdir(tmpdir) if f.endswith(".shp")]
-                if not shp_path:
-                    st.error("❌ No se encontró ningún archivo .shp en el ZIP descargado.")
-                    return None
-                
-                gdf = None
-                try:
-                    gdf = gpd.read_file(shp_path[0])
-                except Exception as e:
-                    st.warning(f"Advertencia: Error al cargar shapefile con encoding predeterminado. Intentando con 'latin1'. Error: {e}")
-                    gdf = gpd.read_file(shp_path[0], encoding='latin1')
-                
-                # Asegurarse de que el GeoDataFrame esté en CRS 4326 para Folium
-                if gdf is not None and gdf.crs != "EPSG:4326":
-                    gdf = gdf.to_crs(epsg=4326)
-                
-                # --- FIX: Asegurar que 'area_ha' sea numérica y sin NaN para la capa principal ---
-                if gdf is not None and 'area_ha' in gdf.columns:
-                    # Convertir a numérico, forzando errores a NaN, y luego rellenar NaN con 0
-                    gdf['area_ha'] = pd.to_numeric(gdf['area_ha'], errors='coerce').fillna(0)
-
-                # Rellenar valores NaN con una cadena vacía y luego convertir todas las columnas no geométricas a tipo string
-                if gdf is not None:
-                    for col in gdf.columns:
-                        if col != gdf.geometry.name:
-                            # Solo convertir a str si la columna no es 'area_ha' (que ya se manejó)
-                            if col != 'area_ha': 
-                                gdf[col] = gdf[col].fillna('').astype(str) 
-
-                return gdf
-
-    except requests.exceptions.RequestException as e:
-        st.error(f"❌ Error al descargar el archivo ZIP: {e}")
+    r = requests.get(url)
+    if r.status_code != 200:
+        st.error("❌ No se pudo descargar el archivo ZIP.")
         return None
-    except zipfile.BadZipFile:
-        st.error("❌ El archivo descargado no es un ZIP válido.")
-        return None
-    except Exception as e:
-        st.error(f"❌ Error inesperado al cargar el archivo ZIP: {e}")
-        return None
+    with zipfile.ZipFile(BytesIO(r.content)) as zip_ref:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            zip_ref.extractall(tmpdir)
+            shp_path = [os.path.join(tmpdir, f) for f in os.listdir(tmpdir) if f.endswith(".shp")]
+            if not shp_path:
+                st.error("❌ No se encontró ningún archivo .shp en el ZIP descargado.")
+                return None
+            return gpd.read_file(shp_path[0])
 
 def onedrive_a_directo(url_onedrive):
     if "1drv.ms" in url_onedrive:
@@ -196,15 +162,8 @@ def onedrive_a_directo(url_onedrive):
         return r.url.replace("redir?", "download?").replace("redir=", "download=")
     return url_onedrive
 
-# Carga el shapefile principal
 url_zip = onedrive_a_directo(st.secrets["URL_ZIP"])
 gdf_total = descargar_y_cargar_zip(url_zip)
-
-# --- Carga la nueva capa de Resguardos y Consejos (ANT) ---
-# Nueva URL proporcionada por el usuario
-url_formalizado_zip = "https://raw.githubusercontent.com/lmiguerrero/Mapanima/main/Formalizado.zip"
-gdf_formalizado = descargar_y_cargar_zip(url_formalizado_zip)
-
 
 # --- Banner superior del visor ya autenticado ---
 with st.container():
@@ -238,11 +197,6 @@ if gdf_total is not None:
     # --- Opción para mostrar/ocultar relleno de polígonos ---
     st.sidebar.header("🎨 Estilos del Mapa")
     mostrar_relleno = st.sidebar.checkbox("Mostrar relleno de polígonos", value=True)
-
-    # --- NUEVO: Opción para mostrar/ocultar capa formalizado ---
-    st.sidebar.header("🗺️ Capas Base Adicionales")
-    mostrar_capa_formalizado = st.sidebar.checkbox("Mostrar Resguardos y Consejos (ANT)", value=False)
-
 
     st.sidebar.header("⚙️ Rendimiento")
     usar_simplify = st.sidebar.checkbox("Simplificar geometría", value=True)
@@ -280,11 +234,6 @@ if gdf_total is not None:
         st.subheader("🗺️ Mapa filtrado")
 
         if not gdf_filtrado.empty:
-            # Asegurarse de que 'area_ha' sea numérica antes de formatear
-            # Esto ya se hace en descargar_y_cargar_zip, pero es una doble verificación
-            if 'area_ha' in gdf_filtrado.columns:
-                gdf_filtrado['area_ha'] = pd.to_numeric(gdf_filtrado['area_ha'], errors='coerce').fillna(0)
-
             gdf_filtrado["area_formateada"] = gdf_filtrado["area_ha"].apply(
                 lambda ha: f"{int(ha)} ha + {int(round((ha - int(ha)) * 10000)):,} m²"
             )
@@ -303,10 +252,8 @@ if gdf_total is not None:
                 opacidad_relleno = 0.6 if mostrar_relleno else 0 # Controla la opacidad del relleno
                 return {"fillColor": color_relleno, "color": color_borde, "weight": 1, "fillOpacity": opacidad_relleno}
 
-            # Añadir la capa principal filtrada
             folium.GeoJson(
                 gdf_filtrado,
-                name="Territorios Filtrados", # Nombre para el LayerControl
                 style_function=style_function_by_tipo,
                 tooltip=folium.GeoJsonTooltip(
                     fields=["id_rtdaf", "nom_terr", "etnia", "departamen", "municipio", "etapa", "estado_act", "tipologia", "area_formateada"],
@@ -315,40 +262,6 @@ if gdf_total is not None:
                 )
             ).add_to(m)
 
-            # --- NUEVO: Añadir la capa de Formalizado si está seleccionada ---
-            if mostrar_capa_formalizado and gdf_formalizado is not None:
-                def style_formalizado_layer(feature):
-                    return {
-                        "fillColor": "#A0D8B3",  # Verde claro sutil
-                        "color": "#3CB371",     # Borde verde medio
-                        "weight": 1,
-                        "fillOpacity": 0.4
-                    }
-                
-                # Definir los campos específicos para el tooltip de la capa formalizado
-                formalizado_tooltip_fields = ["NOMBRE", "ID_ANT", "AREA_TOTAL"]
-                formalizado_tooltip_aliases = ["Nombre:", "ID ANT:", "Área Total:"]
-
-                # Verificar si los campos existen en el GeoDataFrame antes de usarlos
-                # Esto previene errores si la estructura de la capa cambia
-                actual_fields = [f for f in formalizado_tooltip_fields if f in gdf_formalizado.columns]
-                actual_aliases = [formalizado_tooltip_aliases[i] for i, f in enumerate(formalizado_tooltip_fields) if f in gdf_formalizado.columns]
-
-                folium.GeoJson(
-                    gdf_formalizado,
-                    name="Resguardos y Consejos (ANT)", # Nombre para el LayerControl
-                    style_function=style_formalizado_layer,
-                    tooltip=folium.GeoJsonTooltip(
-                        fields=actual_fields,
-                        aliases=actual_aliases,
-                        localize=True
-                    )
-                ).add_to(m)
-            
-            # Añadir control de capas para alternar visibilidad de las capas GeoJson
-            folium.LayerControl().add_to(m)
-
-            # Leyenda HTML
             leyenda_html = '''
             <div style="position: absolute; top: 10px; left: 10px; z-index: 9999;
                          background-color: white; padding: 10px; border: 1px solid #ccc;
@@ -356,11 +269,8 @@ if gdf_total is not None:
                 <strong>Leyenda</strong><br>
                 🟢 Territorio indígena (ci)<br>
                 🟤 Territorio afrodescendiente (cn)
+            </div>
             '''
-            if mostrar_capa_formalizado:
-                leyenda_html += '<br><span style="color:#3CB371;">&#9632;</span> Resguardos/Consejos (ANT)' # Símbolo cuadrado para la capa formalizado
-            leyenda_html += '</div>'
-
             m.get_root().html.add_child(folium.Element(leyenda_html))
             m.fit_bounds([[bounds[1], bounds[0]], [bounds[3], bounds[2]]])
             st_folium(m, width=1200, height=600)
