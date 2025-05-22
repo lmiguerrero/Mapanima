@@ -1,5 +1,5 @@
 # --- VERSION FINAL 21/05/2025 ---
-# --- ULTIMA IMPLEMENTACION - CONTORNOS Y CAPA DE FONDO ANT (REVISADA) ---
+# --- ULTIMA IMPLEMENTACION - CONTORNOS Y CAPA DE FONDO ANT (FIX AREA_HA) ---
 # --- Miguel Guerrero ---
 
 import streamlit as st
@@ -165,11 +165,18 @@ def descargar_y_cargar_zip(url):
                 if gdf is not None and gdf.crs != "EPSG:4326":
                     gdf = gdf.to_crs(epsg=4326)
                 
+                # --- FIX: Asegurar que 'area_ha' sea numérica y sin NaN para la capa principal ---
+                if gdf is not None and 'area_ha' in gdf.columns:
+                    # Convertir a numérico, forzando errores a NaN, y luego rellenar NaN con 0
+                    gdf['area_ha'] = pd.to_numeric(gdf['area_ha'], errors='coerce').fillna(0)
+
                 # Rellenar valores NaN con una cadena vacía y luego convertir todas las columnas no geométricas a tipo string
                 if gdf is not None:
                     for col in gdf.columns:
                         if col != gdf.geometry.name:
-                            gdf[col] = gdf[col].fillna('').astype(str) # Rellenar NaN antes de convertir a str
+                            # Solo convertir a str si la columna no es 'area_ha' (que ya se manejó)
+                            if col != 'area_ha': 
+                                gdf[col] = gdf[col].fillna('').astype(str) 
 
                 return gdf
 
@@ -273,6 +280,11 @@ if gdf_total is not None:
         st.subheader("🗺️ Mapa filtrado")
 
         if not gdf_filtrado.empty:
+            # Asegurarse de que 'area_ha' sea numérica antes de formatear
+            # Esto ya se hace en descargar_y_cargar_zip, pero es una doble verificación
+            if 'area_ha' in gdf_filtrado.columns:
+                gdf_filtrado['area_ha'] = pd.to_numeric(gdf_filtrado['area_ha'], errors='coerce').fillna(0)
+
             gdf_filtrado["area_formateada"] = gdf_filtrado["area_ha"].apply(
                 lambda ha: f"{int(ha)} ha + {int(round((ha - int(ha)) * 10000)):,} m²"
             )
