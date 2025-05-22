@@ -1,3 +1,7 @@
+# --- VERSION FINAL 21/05/2025 ---
+# --- ULTIMA IMPLEMENTACION - CONTORNOS ---
+# --- Miguel Guerrero ---
+
 import streamlit as st
 import geopandas as gpd
 import pandas as pd
@@ -92,10 +96,6 @@ st.markdown("""
 
 # --- Login con columnas ---
 
-# Asegúrate de que st.secrets["USUARIO"] y st.secrets["CONTRASENA"] estén configurados en tu entorno Streamlit Cloud
-# Por ejemplo, en .streamlit/secrets.toml:
-# USUARIO = "tu_usuario"
-# CONTRASENA = "tu_contrasena"
 usuario_valido = st.secrets["USUARIO"]
 contrasena_valida = st.secrets["CONTRASENA"]
 
@@ -114,7 +114,7 @@ if "autenticado" not in st.session_state or not st.session_state["autenticado"]:
                 st.error("Usuario o contraseña incorrectos")
 
     with col2:
-        # Asegúrate de tener las imágenes 'Mapa1.png' y 'GEOVISOR.png' en la misma carpeta que tu script
+        # 'Mapa1.png' y 'GEOVISOR.png
         st.image("Mapa1.png", use_container_width=True)  # Si quieres cambiar el banner aquí
         st.markdown(
             """
