@@ -348,8 +348,8 @@ if st.session_state["mostrar_mapa"]:
                          background-color: white; padding: 10px; border: 1px solid #ccc;
                          font-size: 14px; box-shadow: 2px 2px 4px rgba(0,0,0,0.1);">
                 <strong>Leyenda</strong><br>
-                🟢 Territorio indígena (ci)<br>
-                🟤 Territorio afrodescendiente (cn)
+                🟢 Comunidades Indigenas (ci)<br>
+                🟤 Comunidades negras, afrocolombianas, raizales y palenqueras (cn)
             </div>
             '''
             m.get_root().html.add_child(folium.Element(leyenda_html))
@@ -406,7 +406,7 @@ if st.session_state["mostrar_mapa"]:
             # Descargar mapa como HTML
             html_bytes = m.get_root().render().encode("utf-8")
             st.download_button(
-                label="🌐 Descargar mapa HTML",
+                label="🌐 Descargar mapa",
                 data=html_bytes,
                 file_name="mapa_filtrado.html",
                 mime="text/html"
