@@ -300,7 +300,7 @@ if gdf_total is not None:
                     Territorios filtrados: <strong>{total_territorios}</strong><br>
                     ▸ Comunidades indígenas (ci): <strong>{cuenta_ci}</strong><br>
                     ▸ Consejos comunitarios (cn): <strong>{cuenta_cn}</strong><br>
-                    Área total: <strong>{hectareas} ha + {metros2:,} m²</strong>
+                    Área Cartográfica: <strong>{hectareas} ha + {metros2:,} m²</strong>
                 </div>
                 ''',
                 unsafe_allow_html=True
