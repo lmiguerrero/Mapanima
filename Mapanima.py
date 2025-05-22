@@ -164,6 +164,12 @@ def descargar_y_cargar_zip(url):
                 # Asegurarse de que el GeoDataFrame esté en CRS 4326 para Folium
                 if gdf is not None and gdf.crs != "EPSG:4326":
                     gdf = gdf.to_crs(epsg=4326)
+                
+                # Convertir todas las columnas no geométricas a tipo string para evitar errores de serialización JSON
+                for col in gdf.columns:
+                    if col != gdf.geometry.name:
+                        gdf[col] = gdf[col].astype(str)
+
                 return gdf
 
     except requests.exceptions.RequestException as e:
@@ -308,16 +314,13 @@ if gdf_total is not None:
                 # Determinar campos para el tooltip de la capa formalizado dinámicamente
                 formalizado_tooltip_fields = []
                 formalizado_tooltip_aliases = []
-                # Priorizar campos conocidos, si existen
-                if 'nom_terr' in gdf_formalizado.columns:
-                    formalizado_tooltip_fields.append("nom_terr")
-                    formalizado_tooltip_aliases.append("Territorio:")
-                if 'etnia' in gdf_formalizado.columns:
-                    formalizado_tooltip_fields.append("etnia")
-                    formalizado_tooltip_aliases.append("Etnia:")
-                if 'departamen' in gdf_formalizado.columns:
-                    formalizado_tooltip_fields.append("departamen")
-                    formalizado_tooltip_aliases.append("Departamento:")
+                
+                # Intentar usar campos comunes si existen en la capa formalizado
+                potential_fields = ["nom_terr", "etnia", "departamen", "nombre", "tipo", "departamento"]
+                for field in potential_fields:
+                    if field in gdf_formalizado.columns:
+                        formalizado_tooltip_fields.append(field)
+                        formalizado_tooltip_aliases.append(f"{field.replace('_', ' ').title()}:")
                 
                 # Si no se encontraron campos específicos, usar los primeros 3 campos no geométricos
                 if not formalizado_tooltip_fields:
