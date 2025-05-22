@@ -1,5 +1,3 @@
-# --- 19/05/2025 ---
-
 import streamlit as st
 import geopandas as gpd
 import pandas as pd
@@ -94,6 +92,10 @@ st.markdown("""
 
 # --- Login con columnas ---
 
+# Asegúrate de que st.secrets["USUARIO"] y st.secrets["CONTRASENA"] estén configurados en tu entorno Streamlit Cloud
+# Por ejemplo, en .streamlit/secrets.toml:
+# USUARIO = "tu_usuario"
+# CONTRASENA = "tu_contrasena"
 usuario_valido = st.secrets["USUARIO"]
 contrasena_valida = st.secrets["CONTRASENA"]
 
@@ -112,6 +114,7 @@ if "autenticado" not in st.session_state or not st.session_state["autenticado"]:
                 st.error("Usuario o contraseña incorrectos")
 
     with col2:
+        # Asegúrate de tener las imágenes 'Mapa1.png' y 'GEOVISOR.png' en la misma carpeta que tu script
         st.image("Mapa1.png", use_container_width=True)  # Si quieres cambiar el banner aquí
         st.markdown(
             """
@@ -159,6 +162,9 @@ def onedrive_a_directo(url_onedrive):
         return r.url.replace("redir?", "download?").replace("redir=", "download=")
     return url_onedrive
 
+# Asegúrate de que st.secrets["URL_ZIP"] esté configurado en tu entorno Streamlit Cloud
+# Por ejemplo, en .streamlit/secrets.toml:
+# URL_ZIP = "https://onedrive.live.com/download?cid=..." (URL de descarga directa de OneDrive)
 url_zip = onedrive_a_directo(st.secrets["URL_ZIP"])
 gdf_total = descargar_y_cargar_zip(url_zip)
 
@@ -191,6 +197,10 @@ if gdf_total is not None:
     }
     fondo_seleccionado = st.sidebar.selectbox("🗺️ Fondo del mapa", list(fondos_disponibles.keys()), index=1)
 
+    # --- NUEVO: Opción para mostrar/ocultar relleno de polígonos ---
+    st.sidebar.header("🎨 Estilos del Mapa")
+    mostrar_relleno = st.sidebar.checkbox("Mostrar relleno de polígonos", value=True)
+
     st.sidebar.header("⚙️ Rendimiento")
     usar_simplify = st.sidebar.checkbox("Simplificar geometría", value=True)
     tolerancia = st.sidebar.slider("Nivel de simplificación", 0.00001, 0.001, 0.0001, step=0.00001, format="%.5f")
@@ -206,6 +216,7 @@ if gdf_total is not None:
         if st.button("🔄 Reiniciar visor"):
             st.session_state["mostrar_mapa"] = False
             st.rerun()
+
     if st.session_state["mostrar_mapa"]:
         gdf_filtrado = gdf_total.copy()
         if etapa_sel:
@@ -236,10 +247,13 @@ if gdf_total is not None:
             centro_lon = (bounds[0] + bounds[2]) / 2
             m = folium.Map(location=[centro_lat, centro_lon], zoom_start=10, tiles=fondos_disponibles[fondo_seleccionado])
 
+            # Función de estilo para incluir la opción de relleno ---
             def style_function_by_tipo(feature):
                 tipo = feature["properties"]["cn_ci"]
-                color = "#228B22" if tipo == "ci" else "#8B4513"
-                return {"fillColor": color, "color": color, "weight": 1, "fillOpacity": 0.6}
+                color_borde = "#228B22" if tipo == "ci" else "#8B4513"
+                color_relleno = "#228B22" if tipo == "ci" else "#8B4513"
+                opacidad_relleno = 0.6 if mostrar_relleno else 0 # Controla la opacidad del relleno
+                return {"fillColor": color_relleno, "color": color_borde, "weight": 1, "fillOpacity": opacidad_relleno}
 
             folium.GeoJson(
                 gdf_filtrado,
@@ -253,8 +267,8 @@ if gdf_total is not None:
 
             leyenda_html = '''
             <div style="position: absolute; top: 10px; left: 10px; z-index: 9999;
-                        background-color: white; padding: 10px; border: 1px solid #ccc;
-                        font-size: 14px; box-shadow: 2px 2px 4px rgba(0,0,0,0.1);">
+                         background-color: white; padding: 10px; border: 1px solid #ccc;
+                         font-size: 14px; box-shadow: 2px 2px 4px rgba(0,0,0,0.1);">
                 <strong>Leyenda</strong><br>
                 🟢 Territorio indígena (ci)<br>
                 🟤 Territorio afrodescendiente (cn)
@@ -325,5 +339,3 @@ if gdf_total is not None:
                     file_name="resultados_filtrados.csv",
                     mime="text/csv"
                 )
-
-
