@@ -1,5 +1,5 @@
 # --- VERSION FINAL 21/05/2025 ---
-# --- ULTIMA IMPLEMENTACION - CONTORNOS, BARRAS DE CARGA Y MENSAJES DE ERROR ---
+# --- ULTIMA IMPLEMENTACION - CONTORNOS, BARRAS DE CARGA, MENSAJES DE ERROR Y CREDITOS ---
 # --- Miguel Guerrero ---
 
 import streamlit as st
@@ -81,6 +81,20 @@ st.markdown("""
         border-radius: 6px;
         font-weight: bold;
     }
+    /* Estilo para el pie de página fijo */
+    .fixed-footer {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        text-align: center;
+        padding: 10px 0;
+        background-color: #1b2e1b; /* Fondo verde oscuro */
+        color: #b0c9a8; /* Texto verde claro/gris */
+        font-size: 0.8em;
+        z-index: 1000; /* Asegura que esté por encima de otros contenidos */
+        border-top: 1px solid #346b34; /* Un borde sutil */
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -137,7 +151,16 @@ if "autenticado" not in st.session_state or not st.session_state["autenticado"]:
             unsafe_allow_html=True
         )
         st.image("GEOVISOR.png", width=160)
-
+    
+    # --- Footer para la pantalla de login ---
+    st.markdown(
+        """
+        <div class="fixed-footer">
+            Realizado por Ing. Topográfico Luis Miguel Guerrero | © 2025. Contacto: luis.guerrero@urt.gov.co
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
     st.stop()
 
 # --- Función para descargar y cargar archivos ZIP de shapefiles ---
@@ -325,8 +348,8 @@ if st.session_state["mostrar_mapa"]:
                          background-color: white; padding: 10px; border: 1px solid #ccc;
                          font-size: 14px; box-shadow: 2px 2px 4px rgba(0,0,0,0.1);">
                 <strong>Leyenda</strong><br>
-                🟢 Resguardo Indigena (ci)<br>
-                🟤 Consejo Comunitario (cn)
+                🟢 Territorio indígena (ci)<br>
+                🟤 Territorio afrodescendiente (cn)
             </div>
             '''
             m.get_root().html.add_child(folium.Element(leyenda_html))
@@ -383,7 +406,7 @@ if st.session_state["mostrar_mapa"]:
             # Descargar mapa como HTML
             html_bytes = m.get_root().render().encode("utf-8")
             st.download_button(
-                label="🌐 Descargar mapa",
+                label="🌐 Descargar mapa HTML",
                 data=html_bytes,
                 file_name="mapa_filtrado.html",
                 mime="text/html"
@@ -399,3 +422,13 @@ if st.session_state["mostrar_mapa"]:
             )
     else:
         st.info("No hay datos para mostrar en la tabla o descargar con los filtros actuales.")
+
+# --- Footer global para la pantalla principal del visor ---
+st.markdown(
+    """
+    <div class="fixed-footer">
+        Realizado por Ing. Topográfico Luis Miguel Guerrero | © 2025. Contacto: luis.guerrero@urt.gov.co
+    </div>
+    """,
+    unsafe_allow_html=True
+)
