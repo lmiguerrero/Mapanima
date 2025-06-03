@@ -196,15 +196,18 @@ def descargar_y_cargar_zip(url):
                         st.info("ℹ️ Reproyectando datos a EPSG:4326 para compatibilidad con el mapa.")
                         gdf = gdf.to_crs(epsg=4326)
                     
-                    # Asegurar que 'area_ha' sea numérica y sin NaN para los cálculos
-                    if gdf is not None and 'area_ha' in gdf.columns:
-                        gdf['area_ha'] = pd.to_numeric(gdf['area_ha'], errors='coerce').fillna(0)
-                    elif gdf is not None:
-                        # Si no existe 'area_ha', calcularla a partir de la geometría para los cálculos de porcentaje de traslape
-                        # Nota: el cálculo de área en CRS 4326 (lat/lon) es aproximado. Para precisión, reproyectar a un CRS local.
-                        # Aquí se usa el mismo factor de conversión que ya manejabas.
-                        gdf['area_ha'] = gdf.geometry.area * 12365.1613 
-                        st.warning("⚠️ La columna 'area_ha' no fue encontrada en los datos principales. Se calculó el área en hectáreas de los polígonos.")
+                    # --- INICIO DEL CAMBIO DE CÁLCULO DE ÁREA ---
+                    if gdf is not None:
+                        if 'area_ha' not in gdf.columns:
+                            st.warning("⚠️ La columna 'area_ha' no fue encontrada en los datos principales. Calculando el área en hectáreas de los polígonos con reproyección para mayor precisión.")
+                            # Reproyectar a EPSG:3857 (Web Mercator) para calcular el área en metros cuadrados
+                            gdf_proj = gdf.to_crs(epsg=3857) 
+                            # Calcular área en m^2 y convertir a hectáreas (1 ha = 10,000 m^2)
+                            gdf['area_ha'] = (gdf_proj.geometry.area / 10000).round(2) 
+                        else:
+                            # Si 'area_ha' ya existe, asegurarse de que sea numérica y sin NaN
+                            gdf['area_ha'] = pd.to_numeric(gdf['area_ha'], errors='coerce').fillna(0).round(2)
+                    # --- FIN DEL CAMBIO DE CÁLCULO DE ÁREA ---
 
                     # Rellenar valores NaN con una cadena vacía y luego convertir todas las columnas no geométricas a tipo string
                     if gdf is not None:
@@ -440,7 +443,6 @@ if "autenticado" in st.session_state and st.session_state["autenticado"]:
                             gdf_filtrado_for_save.set_crs(epsg=4326, inplace=True) 
 
                         shp_base_path = os.path.join(tmpdir, "territorios_filtrados")
-                        # Es importante guardar todas las columnas para que el usuario tenga los datos completos
                         gdf_filtrado_for_save.to_file(shp_base_path + ".shp") 
 
                         zip_output_path = shutil.make_archive(shp_base_path, 'zip', tmpdir)
@@ -503,7 +505,6 @@ if "autenticado" in st.session_state and st.session_state["autenticado"]:
                                 st.stop() 
                             
                             # Preparar gdf_total con las áreas originales para el merge
-                            # Asegúrate de que 'id_rtdaf' sea el ID único de tus territorios étnicos
                             gdf_total_para_merge = gdf_total[['id_rtdaf', 'area_ha']].copy()
                             gdf_total_para_merge.rename(columns={'area_ha': 'area_original_ha'}, inplace=True)
                             
@@ -511,9 +512,11 @@ if "autenticado" in st.session_state and st.session_state["autenticado"]:
                             gdf_interseccion = gpd.overlay(gdf_usuario, gdf_total, how="intersection")
 
                             if not gdf_interseccion.empty:
-                                # Calcular área en hectáreas para la intersección
-                                gdf_interseccion["area_traslape_ha"] = gdf_interseccion.geometry.area * 12365.1613
-                                gdf_interseccion["area_traslape_ha"] = gdf_interseccion["area_traslape_ha"].round(2)
+                                # --- INICIO DEL CAMBIO DE CÁLCULO DE ÁREA PARA TRASLAPE ---
+                                # Reproyectar la intersección para calcular el área de forma precisa
+                                gdf_interseccion_proj = gdf_interseccion.to_crs(epsg=3857) 
+                                gdf_interseccion["area_traslape_ha"] = (gdf_interseccion_proj.geometry.area / 10000).round(2) # Convert m^2 to hectares
+                                # --- FIN DEL CAMBIO DE CÁLCULO DE ÁREA PARA TRASLAPE ---
 
                                 # Fusionar con las áreas originales de los territorios étnicos
                                 # Convertir 'id_rtdaf' a string en ambos GDFs para un merge más robusto
@@ -526,7 +529,7 @@ if "autenticado" in st.session_state and st.session_state["autenticado"]:
                                     on='id_rtdaf_str', 
                                     how='left'
                                 )
-                                # Eliminar la columna temporal de string
+                                # Eliminar la columna temporal de string después del merge
                                 gdf_interseccion.drop(columns=['id_rtdaf_str'], inplace=True)
 
 
