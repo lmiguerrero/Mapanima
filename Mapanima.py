@@ -588,4 +588,54 @@ with tab2:
             
             st_folium(m_traslape, width=1200, height=600)
 
-            st.subheader("📋
+            st.subheader("📋 Detalles del traslape")
+            tabla_traslape = intersecciones[[
+                "id_rtdaf", "nom_terr", "cn_ci", "departamen", "municipio",
+                "area_ha_interseccion", "% del predio", "% del territorio"
+            ]].rename(columns={
+                "area_ha_interseccion": "Área Traslapada (ha)",
+                "nom_terr": "Nombre Territorio",
+                "cn_ci": "Tipo Territorio",
+                "id_rtdaf": "ID Territorio",
+                "departamen": "Departamento",
+                "municipio": "Municipio"
+            })
+            tabla_traslape["Área Traslapada (ha)"] = tabla_traslape["Área Traslapada (ha)"].round(2)
+            st.dataframe(tabla_traslape)
+
+            with st.expander("📥 Opciones de descarga del traslape"):
+                csv_traslape = tabla_traslape.to_csv(index=False).encode("utf-8")
+                st.download_button(
+                    "⬇️ Descargar CSV del traslape",
+                    data=csv_traslape,
+                    file_name="reporte_traslape.csv",
+                    mime="text/csv"
+                )
+                
+                with tempfile.TemporaryDirectory() as tmpdir_interseccion:
+                    shp_interseccion_path = os.path.join(tmpdir_interseccion, "intersecciones.shp")
+                    intersecciones.to_crs(epsg=4326).to_file(shp_interseccion_path)
+                    zip_interseccion_path = shutil.make_archive(shp_interseccion_path.replace(".shp", ""), 'zip', tmpdir_interseccion)
+                    with open(zip_interseccion_path, "rb") as f:
+                        st.download_button(
+                            label="⬇️ Descargar SHP de la intersección (.zip)",
+                            data=f,
+                            file_name="intersecciones.zip",
+                            mime="application/zip"
+                        )
+
+        else:
+            st.info("✅ No se encontraron traslapes con territorios formalizados.")
+    else:
+        st.info("Carga un archivo .zip para ver el traslape.")
+
+
+# --- Footer global para la pantalla principal del visor ---
+st.markdown(
+    """
+    <div class="fixed-footer">
+        Realizado por Ing. Topográfico Luis Miguel Guerrero | © 2025. Contacto: luis.guerrero@urt.gov.co
+    </div>
+    """,
+    unsafe_allow_html=True
+)
