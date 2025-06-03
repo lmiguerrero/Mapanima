@@ -199,6 +199,12 @@ def descargar_y_cargar_zip(url):
                     # Asegurar que 'area_ha' sea numérica y sin NaN para los cálculos
                     if gdf is not None and 'area_ha' in gdf.columns:
                         gdf['area_ha'] = pd.to_numeric(gdf['area_ha'], errors='coerce').fillna(0)
+                    elif gdf is not None:
+                        # Si no existe 'area_ha', calcularla a partir de la geometría para los cálculos de porcentaje de traslape
+                        # Nota: el cálculo de área en CRS 4326 (lat/lon) es aproximado. Para precisión, reproyectar a un CRS local.
+                        # Aquí se usa el mismo factor de conversión que ya manejabas.
+                        gdf['area_ha'] = gdf.geometry.area * 12365.1613 
+                        st.warning("⚠️ La columna 'area_ha' no fue encontrada. Se calculó el área en hectáreas de los polígonos.")
 
                     # Rellenar valores NaN con una cadena vacía y luego convertir todas las columnas no geométricas a tipo string
                     if gdf is not None:
@@ -254,17 +260,22 @@ with tabs[0]:
 
     # Continuar solo si gdf_total se cargó correctamente
     # Normalizar algunas columnas para filtrado consistente
-    gdf_total['etapa'] = gdf_total['etapa'].astype(str).str.lower().fillna('')
-    gdf_total['estado_act'] = gdf_total['estado_act'].astype(str).str.strip().fillna('')
-    gdf_total['cn_ci'] = gdf_total['cn_ci'].astype(str).str.lower().fillna('')
+    # Asegúrate de que estas columnas existan en tu gdf_total
+    for col_name in ['etapa', 'estado_act', 'cn_ci', 'departamen', 'nom_terr', 'id_rtdaf', 'tipologia']:
+        if col_name in gdf_total.columns:
+            gdf_total[col_name] = gdf_total[col_name].astype(str).str.lower().fillna('')
+        else:
+            # st.warning(f"La columna '{col_name}' no se encuentra en los datos principales. Los filtros relacionados no funcionarán.")
+            # Crear una columna vacía para evitar errores si no existe
+            gdf_total[col_name] = '' 
     
     st.sidebar.header("🎯 Filtros")
     etapa_sel = st.sidebar.multiselect("Filtrar por etapa", sorted(gdf_total['etapa'].unique()))
     estado_sel = st.sidebar.multiselect("Filtrar por estado del caso", sorted(gdf_total['estado_act'].unique()))
     tipo_sel = st.sidebar.multiselect("Filtrar por tipo de territorio", sorted(gdf_total['cn_ci'].unique()))
-    depto_sel = st.sidebar.multiselect("Filtrar por departamento", sorted(gdf_total['departamen'].dropna().unique()))
+    depto_sel = st.sidebar.multiselect("Filtrar por departamento", sorted(gdf_total['departamen'].unique()))
     
-    nombre_opciones = sorted(gdf_total['nom_terr'].dropna().unique())
+    nombre_opciones = sorted(gdf_total['nom_terr'].unique())
     nombre_seleccionado = st.sidebar.selectbox("🔍 Buscar por nombre (nom_terr)", options=[""] + nombre_opciones)
     id_buscar = st.sidebar.text_input("🔍 Buscar por ID (id_rtdaf)")
 
@@ -414,16 +425,13 @@ with tabs[0]:
             with st.expander("📥 Opciones de descarga"):
                 # Descargar shapefile filtrado como ZIP
                 with tempfile.TemporaryDirectory() as tmpdir:
-                    # Guardar el GeoDataFrame filtrado en un archivo temporal
-                    # Asegurarse de que el CRS esté establecido antes de guardar
                     gdf_filtrado_for_save = gdf_filtrado.copy()
                     if gdf_filtrado_for_save.crs is None:
-                        gdf_filtrado_for_save.set_crs(epsg=4326, inplace=True) # Establecer CRS si falta
+                        gdf_filtrado_for_save.set_crs(epsg=4326, inplace=True) 
 
-                    shp_base_path = os.path.join(tmpdir, "territorios_filtrados") # Sin extensión para make_archive
-                    gdf_filtrado_for_save.to_file(shp_base_path + ".shp") # Geopandas añade los demás archivos
+                    shp_base_path = os.path.join(tmpdir, "territorios_filtrados")
+                    gdf_filtrado_for_save.to_file(shp_base_path + ".shp") 
 
-                    # Crear el archivo ZIP que contiene el shapefile y sus componentes
                     zip_output_path = shutil.make_archive(shp_base_path, 'zip', tmpdir)
                     
                     with open(zip_output_path, "rb") as f:
@@ -481,54 +489,121 @@ with tabs[1]:
                         if gdf_total is None:
                             st.error("❌ Los datos principales del visor no se cargaron, no se puede realizar el análisis de traslape.")
                             st.stop() # Detener la ejecución si no hay datos principales
-
+                        
+                        # Guardar el área original del territorio étnico para el cálculo del porcentaje de traslape
+                        # Es crucial que 'id_rtdaf' (o un ID único) exista en gdf_total para el merge.
+                        # Si no tienes 'id_rtdaf' o un ID único, necesitarás adaptar esta parte.
+                        gdf_total_areas = gdf_total[['id_rtdaf', 'area_ha']].copy()
+                        gdf_total_areas.rename(columns={'area_ha': 'area_original_ha'}, inplace=True)
+                        
                         # Realizar la intersección
                         gdf_interseccion = gpd.overlay(gdf_usuario, gdf_total, how="intersection")
 
                         if not gdf_interseccion.empty:
                             # Calcular área en hectáreas para la intersección
-                            # Es importante que el CRS esté en un sistema proyectado para cálculo de área preciso.
-                            # Aunque el factor es una aproximación, lo mantenemos como en tu código original.
-                            gdf_interseccion["area_ha"] = gdf_interseccion.geometry.area * 12365.1613
-                            gdf_interseccion["area_ha"] = gdf_interseccion["area_ha"].round(2)
+                            gdf_interseccion["area_traslape_ha"] = gdf_interseccion.geometry.area * 12365.1613
+                            gdf_interseccion["area_traslape_ha"] = gdf_interseccion["area_traslape_ha"].round(2)
+
+                            # Fusionar con las áreas originales de los territorios étnicos
+                            # Usamos `id_rtdaf` como clave de fusión. Si no tienes un ID único, esto debe adaptarse.
+                            gdf_interseccion = pd.merge(
+                                gdf_interseccion,
+                                gdf_total_areas,
+                                on='id_rtdaf', # Reemplaza con el ID único de tus territorios étnicos
+                                how='left'
+                            )
+
+                            # Calcular el porcentaje de traslape
+                            gdf_interseccion['porc_traslape'] = (
+                                (gdf_interseccion['area_traslape_ha'] / gdf_interseccion['area_original_ha']) * 100
+                            ).round(2).fillna(0) # Manejar división por cero o NaN
+                            gdf_interseccion['porc_traslape_str'] = gdf_interseccion['porc_traslape'].astype(str) + '%'
 
                             st.success(f"🔍 Se encontraron {len(gdf_interseccion)} intersecciones.")
 
-                            # Centrar el mapa de intersección
+                            # Centrar el mapa para mostrar todas las capas relevantes
+                            # Combinar los bounds de gdf_usuario y gdf_total para un centrado adecuado
+                            combined_bounds = pd.concat([gdf_usuario, gdf_total]).total_bounds
+                            
                             m_inter = folium.Map(
-                                location=[gdf_interseccion.geometry.centroid.y.mean(), gdf_interseccion.geometry.centroid.x.mean()],
-                                zoom_start=10,
+                                location=[(combined_bounds[1] + combined_bounds[3]) / 2, (combined_bounds[0] + combined_bounds[2]) / 2],
+                                zoom_start=8,
                                 tiles="CartoDB positron"
                             )
+                            
+                            # 1. Añadir el shapefile del usuario (primera capa, en gris)
+                            folium.GeoJson(
+                                gdf_usuario, 
+                                name="Shapefile del usuario",
+                                style_function=lambda x: {"fillColor": "gray", "color": "gray", "weight": 1, "fillOpacity": 0.3}
+                            ).add_to(m_inter)
 
-                            # Añadir el shapefile del usuario (gris semi-transparente)
-                            folium.GeoJson(gdf_usuario, style_function=lambda x: {"fillColor": "gray", "color": "gray", "weight": 1, "fillOpacity": 0.3}).add_to(m_inter)
+                            # 2. Añadir los territorios étnicos completos (segunda capa, con borde delgado y relleno casi transparente)
+                            # Se usa gdf_total filtrado por los IDs de los territorios con intersección
+                            # Esto asegura que solo se dibujen los territorios étnicos que tienen un traslape.
+                            ids_con_traslape = gdf_interseccion['id_rtdaf'].unique()
+                            gdf_territorios_afectados = gdf_total[gdf_total['id_rtdaf'].isin(ids_con_traslape)]
+
+                            folium.GeoJson(
+                                gdf_territorios_afectados,
+                                name="Territorios étnicos afectados",
+                                style_function=lambda x: {
+                                    "fillColor": "#346b34", # Un verde más oscuro, color institucional
+                                    "color": "#346b34",
+                                    "weight": 2, # Borde un poco más grueso para distinguirlo
+                                    "fillOpacity": 0.1 # Muy transparente para ver la intersección encima
+                                },
+                                tooltip=folium.GeoJsonTooltip(
+                                    fields=["nom_terr", "etnia", "area_original_ha"], # Muestra el área original
+                                    aliases=["Territorio:", "Etnia:", "Área Original (ha):"]
+                                )
+                            ).add_to(m_inter)
+
+
+                            # 3. Añadir las intersecciones (tercera capa, en rojo, con relleno más opaco)
+                            folium.GeoJson(
+                                gdf_interseccion,
+                                name="Áreas de traslape",
+                                style_function=lambda x: {"fillColor": "red", "color": "red", "weight": 1.5, "fillOpacity": 0.7},
+                                tooltip=folium.GeoJsonTooltip(
+                                    fields=["nom_terr", "etnia", "area_traslape_ha", "porc_traslape_str"],
+                                    aliases=["Territorio:", "Etnia:", "Área traslapada (ha):", "Porcentaje traslapado:"],
+                                    localize=True
+                                )
+                            ).add_to(m_inter)
                             
-                            # Añadir las intersecciones (rojo semi-transparente)
-                            folium.GeoJson(gdf_interseccion,
-                                style_function=lambda x: {"fillColor": "red", "color": "red", "weight": 1, "fillOpacity": 0.6},
-                                tooltip=folium.GeoJsonTooltip(fields=["nom_terr", "etnia", "departamen", "municipio", "area_ha"],
-                                    aliases=["Territorio:", "Etnia:", "Departamento:", "Municipio:", "Área traslapada (ha):"]
-                                )).add_to(m_inter)
-                            
-                            # Ajustar el zoom del mapa de intersección para que abarque ambas capas si es posible
-                            # Unir los bounds de ambas capas para un fit_bounds más preciso
-                            all_bounds = pd.concat([gdf_usuario, gdf_interseccion], ignore_index=True).total_bounds
-                            m_inter.fit_bounds([[all_bounds[1], all_bounds[0]], [all_bounds[3], all_bounds[2]]])
+                            # Añadir control de capas
+                            folium.LayerControl().add_to(m_inter)
+
+                            # Ajustar el mapa a los límites combinados de todas las capas
+                            m_inter.fit_bounds([[combined_bounds[1], combined_bounds[0]], [combined_bounds[3], combined_bounds[2]]])
 
                             st_folium(m_inter, width=1100, height=600)
 
                             st.markdown("### 📋 Tabla de intersección")
-                            # Mostrar solo columnas de interés para la tabla de intersección
-                            columnas_interseccion = ["nom_terr", "etnia", "departamen", "municipio", "area_ha"] + [col for col in gdf_interseccion.columns if col not in gdf_total.columns and col != "geometry" and col != "area_ha"]
-                            st.dataframe(gdf_interseccion[columnas_interseccion].drop(columns="geometry", errors='ignore'))
+                            # Columnas a mostrar en la tabla de resultados
+                            cols_to_display = [
+                                "id_rtdaf", # ID del territorio étnico
+                                "nom_terr",
+                                "etnia",
+                                "departamen",
+                                "municipio",
+                                "area_original_ha",
+                                "area_traslape_ha",
+                                "porc_traslape_str"
+                            ]
+                            # Asegúrate de que todas las columnas existan antes de seleccionarlas
+                            cols_to_display = [col for col in cols_to_display if col in gdf_interseccion.columns]
+                            
+                            st.dataframe(gdf_interseccion[cols_to_display])
 
-                            csv_inter = gdf_interseccion.drop(columns="geometry").to_csv(index=False).encode("utf-8")
-                            st.download_button("💾 Descargar resultados de intersección como CSV", csv_inter, "intersecciones.csv", "text/csv")
+                            csv_inter = gdf_interseccion[cols_to_display].to_csv(index=False).encode("utf-8")
+                            st.download_button("💾 Descargar resultados como CSV", csv_inter, "intersecciones.csv", "text/csv")
                         else:
                             st.warning("No se encontraron intersecciones entre tu shapefile y los territorios cargados.")
                     except Exception as e:
-                        st.error(f"❌ Error al procesar el shapefile del usuario: {e}")
+                        st.error(f"❌ Error al procesar el shapefile del usuario o al realizar el análisis de traslape: {e}")
+                        st.exception(e) # Esto mostrará el traceback completo para depuración
                 else:
                     st.error("No se encontró ningún archivo .shp dentro del ZIP cargado. Asegúrate de que el ZIP contenga un shapefile válido.")
 
