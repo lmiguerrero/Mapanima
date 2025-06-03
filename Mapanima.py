@@ -438,7 +438,6 @@ st.markdown(
 )
 
 
-
 with tab2:
     st.markdown("### 📐 Verificar traslape con polígono cargado")
 
@@ -504,6 +503,7 @@ with tab2:
                             intersecciones["% del predio"] = None
                             intersecciones["% del territorio"] = None
 
+                        # Funciones correctamente indentadas
                         def borde_tipo(x):
                             tipo = x["properties"]["Tipo"].strip().lower()
                             return {
@@ -548,6 +548,8 @@ with tab2:
                         st.download_button("⬇️ Descargar CSV del traslape", data=csv_traslape, file_name="traslapes_con_area.csv", mime="text/csv")
                     else:
                         st.info("✅ No se encontraron traslapes con territorios formalizados.")
+
+
 # --- Footer global para la pantalla principal del visor ---
 st.markdown(
     """
@@ -671,3 +673,4 @@ else:
                         st.download_button("⬇️ Descargar CSV del traslape", data=csv_traslape, file_name="traslapes_con_area.csv", mime="text/csv")
                     else:
                         st.info("✅ No se encontraron traslapes con territorios formalizados.")
+
