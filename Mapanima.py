@@ -1,6 +1,5 @@
 # --- VERSION FINAL CON TRASLAPE 03/06/2025 ---
 # --- VISOR ÉTNICO + ANÁLISIS DE TRASLAPE ---
-# --- Miguel Guerrero & Kai 🤖 ---
 
 import streamlit as st
 import geopandas as gpd
