@@ -485,9 +485,26 @@ with tab2:
                         intersecciones["area_ha"] = intersecciones["area_m2"] / 10000
 
                         area_predio_m2 = user_shp.to_crs(epsg=9377).geometry.area.sum()
+                        
 
-                        intersecciones["% del predio"] = (intersecciones["area_m2"] / area_predio_m2 * 100).round(2)
-                        intersecciones["% del territorio"] = (intersecciones["area_m2"] / intersecciones["area_territorio_m2"] * 100).round(2)
+                        
+id_col = [col for col in intersecciones.columns if "id_rtdaf" in col]
+if id_col:
+    intersecciones = intersecciones.rename(columns={id_col[0]: "id_rtdaf"})
+    intersecciones = intersecciones.merge(
+        gdf_total[["id_rtdaf", "area_ha"]],
+        on="id_rtdaf",
+        how="left"
+    )
+    intersecciones["area_territorio_m2"] = intersecciones["area_ha"] * 10000
+    intersecciones["% del predio"] = (intersecciones["area_m2"] / area_predio_m2 * 100).round(2)
+    intersecciones["% del territorio"] = (intersecciones["area_m2"] / intersecciones["area_territorio_m2"] * 100).round(2)
+else:
+    st.warning("⚠️ No se encontró columna 'id_rtdaf' para calcular el área del territorio.")
+    intersecciones["area_territorio_m2"] = None
+    intersecciones["% del predio"] = None
+    intersecciones["% del territorio"] = None
+
 
                         def borde_tipo(x):
                             tipo = x["properties"]["Tipo"].strip().lower()
