@@ -128,12 +128,13 @@ if "autenticado" not in st.session_state or not st.session_state["autenticado"]:
                 st.error("Usuario o contraseña incorrectos")
 
     with col2:
-        st.image("Mapa1.png", use_container_width=True)
+        # 'Mapa1.png' y 'GEOVISOR.png
+        st.image("Mapa1.png", use_container_width=True)  # Si quieres cambiar el banner aquí
         st.markdown(
             """
             <div style='padding-top: 1em; font-size: 16px; color: white; text-align: justify;'>
                 <p>
-                    Bienvenido al visor <strong>Mapanima</strong>.
+                    Bienvenido al visor <strong>Mapanima</strong>. 
                 </p>
                 <p>
                     Mapanima nace de la fusión entre “mapa” y “ánima”, evocando no solo la representación gráfica de un territorio, sino su alma, su energía viva. Este nombre es una metáfora del territorio, comprendido no como una extensión vacía delimitada por coordenadas, sino como un espacio sagrado, habitado, sentido y narrado por los pueblos originarios.
@@ -150,7 +151,7 @@ if "autenticado" not in st.session_state or not st.session_state["autenticado"]:
             unsafe_allow_html=True
         )
         st.image("GEOVISOR.png", width=160)
-
+    
     # --- Footer para la pantalla de login ---
     st.markdown(
         """
@@ -166,9 +167,10 @@ if "autenticado" not in st.session_state or not st.session_state["autenticado"]:
 @st.cache_data
 def descargar_y_cargar_zip(url):
     try:
+        # Añade un spinner para la carga inicial del ZIP
         with st.spinner("Cargando datos geográficos principales... Esto puede tardar unos segundos."):
             r = requests.get(url)
-            r.raise_for_status()
+            r.raise_for_status() # Lanza una excepción para errores HTTP (4xx o 5xx)
             with zipfile.ZipFile(BytesIO(r.content)) as zip_ref:
                 with tempfile.TemporaryDirectory() as tmpdir:
                     zip_ref.extractall(tmpdir)
@@ -188,16 +190,19 @@ def descargar_y_cargar_zip(url):
                             st.error(f"❌ Error crítico: No se pudo cargar el shapefile ni con encoding predeterminado ni con 'latin1'. (Detalle: {e_latin1})")
                             return None
                     
+                    # Asegurarse de que el GeoDataFrame esté en CRS 4326 para Folium
                     if gdf is not None and gdf.crs != "EPSG:4326":
                         st.info("ℹ️ Reproyectando datos a EPSG:4326 para compatibilidad con el mapa.")
                         gdf = gdf.to_crs(epsg=4326)
                     
+                    # Asegurar que 'area_ha' sea numérica y sin NaN para los cálculos
                     if gdf is not None and 'area_ha' in gdf.columns:
                         gdf['area_ha'] = pd.to_numeric(gdf['area_ha'], errors='coerce').fillna(0)
 
+                    # Rellenar valores NaN con una cadena vacía y luego convertir todas las columnas no geométricas a tipo string
                     if gdf is not None:
                         for col in gdf.columns:
-                            if col != gdf.geometry.name and col != 'area_ha':
+                            if col != gdf.geometry.name and col != 'area_ha': # No afectar 'area_ha'
                                 gdf[col] = gdf[col].fillna('').astype(str) 
 
                     return gdf
@@ -218,15 +223,15 @@ def descargar_y_cargar_zip(url):
 def onedrive_a_directo(url_onedrive):
     if "1drv.ms" in url_onedrive:
         try:
-            r = requests.get(url_onedrive, allow_redirects=True, timeout=10)
+            r = requests.get(url_onedrive, allow_redirects=True, timeout=10) # Añadir timeout
             r.raise_for_status()
             return r.url.replace("redir?", "download?").replace("redir=", "download=")
         except requests.exceptions.RequestException as e:
             st.error(f"❌ Error al convertir URL de OneDrive a directa: {e}. Asegúrate de que la URL sea válida y accesible.")
-            return url_onedrive
+            return url_onedrive # Retorna la original si falla la conversión
     return url_onedrive
 
-url_zip = st.secrets["URL_ZIP"]
+url_zip = onedrive_a_directo(st.secrets["URL_ZIP"])
 gdf_total = descargar_y_cargar_zip(url_zip)
 
 # --- Banner superior del visor ya autenticado ---
@@ -236,399 +241,187 @@ with st.container():
 # --- CONTENIDO DEL VISOR ---
 if gdf_total is None:
     st.warning("⚠️ No se pudieron cargar los datos geográficos principales. El visor no puede funcionar sin ellos.")
-    st.stop()
+    st.stop() # Detiene la ejecución si los datos principales no se cargaron
 
+# Continuar solo si gdf_total se cargó correctamente
 gdf_total['etapa'] = gdf_total['etapa'].str.lower()
 gdf_total['estado_act'] = gdf_total['estado_act'].str.strip()
 gdf_total['cn_ci'] = gdf_total['cn_ci'].str.lower()
 
-# --- Pestañas ---
-# En versiones anteriores de Streamlit, st.tabs no soporta on_change.
-# El estado de la pestaña se maneja automáticamente por Streamlit al interactuar con ellas.
-tab1, tab2 = st.tabs(["🔍 Consulta por filtros", "📐 Consulta por traslape"])
+st.sidebar.header("🎯 Filtros")
+etapa_sel = st.sidebar.multiselect("Filtrar por etapa", sorted(gdf_total['etapa'].dropna().unique()))
+estado_sel = st.sidebar.multiselect("Filtrar por estado del caso", sorted(gdf_total['estado_act'].dropna().unique()))
+tipo_sel = st.sidebar.multiselect("Filtrar por tipo de territorio", sorted(gdf_total['cn_ci'].dropna().unique()))
+depto_sel = st.sidebar.multiselect("Filtrar por departamento", sorted(gdf_total['departamen'].dropna().unique()))
+nombre_opciones = sorted(gdf_total['nom_terr'].dropna().unique())
+nombre_seleccionado = st.sidebar.selectbox("🔍 Buscar por nombre (nom_terr)", options=[""] + nombre_opciones)
+id_buscar = st.sidebar.text_input("🔍 Buscar por ID (id_rtdaf)")
 
-# ===============================
-# PESTAÑA 1: CONSULTA POR FILTROS
-# ===============================
-with tab1:
-    st.sidebar.header("🎯 Filtros")
-    etapa_sel = st.sidebar.multiselect("Filtrar por etapa", sorted(gdf_total['etapa'].dropna().unique()))
-    estado_sel = st.sidebar.multiselect("Filtrar por estado del caso", sorted(gdf_total['estado_act'].dropna().unique()))
-    tipo_sel = st.sidebar.multiselect("Filtrar por tipo de territorio", sorted(gdf_total['cn_ci'].dropna().unique()))
-    depto_sel = st.sidebar.multiselect("Filtrar por departamento", sorted(gdf_total['departamen'].dropna().unique()))
-    nombre_opciones = sorted(gdf_total['nom_terr'].dropna().unique())
-    nombre_seleccionado = st.sidebar.selectbox("🔍 Buscar por nombre (nom_terr)", options=[""] + nombre_opciones)
-    id_buscar = st.sidebar.text_input("🔍 Buscar por ID (id_rtdaf)")
+fondos_disponibles = {
+    "OpenStreetMap": "OpenStreetMap",
+    "CartoDB Claro (Positron)": "CartoDB positron",
+    "CartoDB Oscuro": "CartoDB dark_matter",
+    "Satélite (Esri)": "Esri.WorldImagery",
+    "Esri NatGeo World Map": "Esri.NatGeoWorldMap",
+    "Esri World Topo Map": "Esri.WorldTopoMap"
+}
+fondo_seleccionado = st.sidebar.selectbox("🗺️ Fondo del mapa", list(fondos_disponibles.keys()), index=1)
 
-    fondos_disponibles = {
-        "OpenStreetMap": "OpenStreetMap",
-        "CartoDB Claro (Positron)": "CartoDB positron",
-        "CartoDB Oscuro": "CartoDB dark_matter",
-        "Satélite (Esri)": "Esri.WorldImagery",
-        "Esri NatGeo World Map": "Esri.NatGeoWorldMap",
-        "Esri World Topo Map": "Esri.WorldTopoMap"
-    }
-    fondo_seleccionado = st.sidebar.selectbox("🗺️ Fondo del mapa", list(fondos_disponibles.keys()), index=1)
+# --- Opción para mostrar/ocultar relleno de polígonos ---
+st.sidebar.header("🎨 Estilos del Mapa")
+mostrar_relleno = st.sidebar.checkbox("Mostrar relleno de polígonos", value=True)
 
-    # --- Opción para mostrar/ocultar relleno de polígonos ---
-    st.sidebar.header("🎨 Estilos del Mapa")
-    mostrar_relleno = st.sidebar.checkbox("Mostrar relleno de polígonos", value=True)
+st.sidebar.header("⚙️ Rendimiento")
+usar_simplify = st.sidebar.checkbox("Simplificar geometría", value=True)
+tolerancia = st.sidebar.slider("Nivel de simplificación", 0.00001, 0.001, 0.0001, step=0.00001, format="%.5f")
 
-    st.sidebar.header("⚙️ Rendimiento")
-    usar_simplify = st.sidebar.checkbox("Simplificar geometría", value=True)
-    tolerancia = st.sidebar.slider("Nivel de simplificación", 0.00001, 0.001, 0.0001, step=0.00001, format="%.5f")
+if "mostrar_mapa" not in st.session_state:
+    st.session_state["mostrar_mapa"] = False
 
-    if "mostrar_mapa" not in st.session_state:
+col_botones = st.sidebar.columns(2)
+with col_botones[0]:
+    if st.button("🧭 Aplicar filtros y mostrar mapa"):
+        st.session_state["mostrar_mapa"] = True
+with col_botones[1]:
+    if st.button("🔄 Reiniciar visor"):
         st.session_state["mostrar_mapa"] = False
+        st.rerun()
 
-    col_botones = st.sidebar.columns(2)
-    with col_botones[0]:
-        if st.button("🧭 Aplicar filtros y mostrar mapa"):
-            st.session_state["mostrar_mapa"] = True
-    with col_botones[1]:
-        if st.button("🔄 Reiniciar visor"):
-            st.session_state["mostrar_mapa"] = False
-            st.rerun()
+if st.session_state["mostrar_mapa"]:
+    gdf_filtrado = gdf_total.copy()
+    if etapa_sel:
+        gdf_filtrado = gdf_filtrado[gdf_filtrado["etapa"].isin(etapa_sel)]
+    if estado_sel:
+        gdf_filtrado = gdf_filtrado[gdf_filtrado["estado_act"].isin(estado_sel)]
+    if tipo_sel:
+        gdf_filtrado = gdf_filtrado[gdf_filtrado["cn_ci"].isin(tipo_sel)]
+    if depto_sel:
+        gdf_filtrado = gdf_filtrado[gdf_filtrado["departamen"].isin(depto_sel)]
+    if id_buscar:
+        gdf_filtrado = gdf_filtrado[gdf_filtrado["id_rtdaf"].astype(str).str.contains(id_buscar)]
+    if nombre_seleccionado:
+        gdf_filtrado = gdf_filtrado[gdf_filtrado["nom_terr"] == nombre_seleccionado]
+    if usar_simplify:
+        gdf_filtrado["geometry"] = gdf_filtrado["geometry"].simplify(tolerancia, preserve_topology=True)
 
-    if st.session_state["mostrar_mapa"]:
-        gdf_filtrado = gdf_total.copy()
-        if etapa_sel:
-            gdf_filtrado = gdf_filtrado[gdf_filtrado["etapa"].isin(etapa_sel)]
-        if estado_sel:
-            gdf_filtrado = gdf_filtrado[gdf_filtrado["estado_act"].isin(estado_sel)]
-        if tipo_sel:
-            gdf_filtrado = gdf_filtrado[gdf_filtrado["cn_ci"].isin(tipo_sel)]
-        if depto_sel:
-            gdf_filtrado = gdf_filtrado[gdf_filtrado["departamen"].isin(depto_sel)]
-        if id_buscar:
-            gdf_filtrado = gdf_filtrado[gdf_filtrado["id_rtdaf"].astype(str).str.contains(id_buscar)]
-        if nombre_seleccionado:
-            gdf_filtrado = gdf_filtrado[gdf_filtrado["nom_terr"] == nombre_seleccionado]
-        if usar_simplify:
-            gdf_filtrado["geometry"] = gdf_filtrado["geometry"].simplify(tolerancia, preserve_topology=True)
+    st.subheader("🗺️ Mapa filtrado")
 
-        st.subheader("🗺️ Mapa filtrado")
+    if not gdf_filtrado.empty:
+        # Asegurarse de que 'area_ha' sea numérica antes de formatear
+        # Esto ya se hace en descargar_y_cargar_zip, pero es una doble verificación
+        if 'area_ha' in gdf_filtrado.columns:
+            gdf_filtrado['area_ha'] = pd.to_numeric(gdf_filtrado['area_ha'], errors='coerce').fillna(0)
 
-        if not gdf_filtrado.empty:
-            if 'area_ha' in gdf_filtrado.columns:
-                gdf_filtrado['area_ha'] = pd.to_numeric(gdf_filtrado['area_ha'], errors='coerce').fillna(0)
+        gdf_filtrado["area_formateada"] = gdf_filtrado["area_ha"].apply(
+            lambda ha: f"{int(ha)} ha + {int(round((ha - int(ha)) * 10000)):,} m²"
+        )
 
-            gdf_filtrado["area_formateada"] = gdf_filtrado["area_ha"].apply(
-                lambda ha: f"{int(ha)} ha + {int(round((ha - int(ha)) * 10000)):,} m²"
-            )
-
-            gdf_filtrado = gdf_filtrado.to_crs(epsg=4326)
-            bounds = gdf_filtrado.total_bounds
-            centro_lat = (bounds[1] + bounds[3]) / 2
-            centro_lon = (bounds[0] + bounds[2]) / 2
-            
-            with st.spinner("Generando mapa..."):
-                m = folium.Map(location=[centro_lat, centro_lon], zoom_start=10, tiles=fondos_disponibles[fondo_seleccionado])
-
-                def style_function_by_tipo(feature):
-                    tipo = feature["properties"]["cn_ci"]
-                    color_borde = "#228B22" if tipo == "ci" else "#8B4513"
-                    color_relleno = "#228B22" if tipo == "ci" else "#8B4513"
-                    opacidad_relleno = 0.6 if mostrar_relleno else 0
-                    return {"fillColor": color_relleno, "color": color_borde, "weight": 1, "fillOpacity": opacidad_relleno}
-
-                folium.GeoJson(
-                    gdf_filtrado,
-                    style_function=style_function_by_tipo,
-                    tooltip=folium.GeoJsonTooltip(
-                        fields=["id_rtdaf", "nom_terr", "etnia", "departamen", "municipio", "etapa", "estado_act", "tipologia", "area_formateada"],
-                        aliases=["ID:", "Territorio:", "Etnia:", "Departamento:", "Municipio:", "Etapa:", "Estado:", "Tipología:", "Área:"],
-                        localize=True
-                    )
-                ).add_to(m)
-
-                leyenda_html = '''
-                <div style="position: absolute; top: 10px; left: 10px; z-index: 9999;
-                            background-color: white; padding: 10px; border: 1px solid #ccc;
-                            font-size: 14px; box-shadow: 2px 2px 4px rgba(0,0,0,0.1); color: black;">
-                    <strong>Leyenda</strong><br>
-                    <span style="color:#228B22; font-weight:bold;">■</span> Comunidades Indigenas (ci)<br>
-                    <span style="color:#8B4513; font-weight:bold;">■</span> Comunidades negras, afrocolombianas, raizales y palenqueras (cn)
-                </div>
-                '''
-                m.get_root().html.add_child(folium.Element(leyenda_html))
-                m.fit_bounds([[bounds[1], bounds[0]], [bounds[3], bounds[2]]])
-                st_folium(m, width=1200, height=600)
-        else:
-            st.warning("⚠️ No se encontraron territorios que coinciden con los filtros aplicados. Por favor, ajusta tus selecciones.")
-
-        st.subheader("📋 Resultados filtrados")
-        if not gdf_filtrado.empty:
-            st.dataframe(gdf_filtrado.drop(columns=["geometry", "area_formateada"]))
-
-            total_territorios = len(gdf_filtrado)
-            area_total = gdf_filtrado["area_ha"].sum()
-            hectareas = int(area_total)
-            metros2 = int(round((area_total - hectareas) * 10000))
-            cuenta_ci = (gdf_filtrado["cn_ci"] == "ci").sum()
-            cuenta_cn = (gdf_filtrado["cn_ci"] == "cn").sum()
-
-            st.markdown(
-                f'''
-                <div style='
-                    margin-top: 1em;
-                    margin-bottom: 1.5em;
-                    padding: 0.7em;
-                    background-color: #e8f5e9;
-                    border-radius: 8px;
-                    font-size: 16px;
-                    color: #2e7d32;'>
-                    <strong>📊 Estadísticas del resultado:</strong><br>
-                    Territorios filtrados: <strong>{total_territorios}</strong><br>
-                    ▸ Comunidades indígenas (ci): <strong>{cuenta_ci}</strong><br>
-                    ▸ Consejos comunitarios (cn): <strong>{cuenta_cn}</strong><br>
-                    Área Cartográfica: <strong>{hectareas} ha + {metros2:} m²</strong>
-                </div>
-                ''',
-                unsafe_allow_html=True
-            )
-            with st.expander("📥 Opciones de descarga"):
-                with tempfile.TemporaryDirectory() as tmpdir:
-                    shp_path = os.path.join(tmpdir, "territorios.shp")
-                    gdf_filtrado.to_file(shp_path)
-                    zip_path = shutil.make_archive(shp_path.replace(".shp", ""), 'zip', tmpdir)
-                    with open(zip_path, "rb") as f:
-                        st.download_button(
-                            label="📆 Descargar shapefile filtrado (.zip)",
-                            data=f,
-                            file_name="territorios_filtrados.zip",
-                            mime="application/zip"
-                        )
-
-                html_bytes = m.get_root().render().encode("utf-8")
-                st.download_button(
-                    label="🌐 Descargar mapa",
-                    data=html_bytes,
-                    file_name="mapa_filtrado.html",
-                    mime="text/html"
-                )
-
-                csv_data = gdf_filtrado.drop(columns=["geometry"]).to_csv(index=False).encode("utf-8")
-                st.download_button(
-                    label="📄 Descargar tabla como CSV",
-                    data=csv_data,
-                    file_name="resultados_filtrados.csv",
-                    mime="text/csv"
-                )
-        else:
-            st.info("No hay datos para mostrar en la tabla o descargar con los filtros actuales.")
-
-# ===============================
-# PESTAÑA 2: TRASLAPE
-# ===============================
-with tab2:
-    st.markdown("### 📐 Verificar traslape con polígono cargado")
-
-    # Inicializar session_state para la pestaña de traslape
-    if 'user_shp_data' not in st.session_state:
-        st.session_state.user_shp_data = None
-    if 'intersections_data' not in st.session_state:
-        st.session_state.intersections_data = None
-
-    # Cargar archivo ZIP del usuario
-    archivo_zip_traslape = st.file_uploader(
-        "Cargar archivo .zip con shapefile (predio o polígono) para traslape",
-        type="zip",
-        key="uploader_traslape_tab2" # Cambiamos la key para que sea única en esta pestaña
-    )
-
-    # Solo procesar el archivo si se cargó uno nuevo
-    if archivo_zip_traslape is not None:
-        # Guardamos el archivo cargado para evitar reprocesar si no cambia
-        # y forzamos el procesamiento si es un archivo nuevo
-        if "last_uploaded_zip_id" not in st.session_state or \
-           st.session_state.last_uploaded_zip_id != archivo_zip_traslape.id:
-            
-            st.session_state.last_uploaded_zip_id = archivo_zip_traslape.id # Guarda el ID del archivo cargado
-            st.session_state.user_shp_data = None # Resetear datos previos
-            st.session_state.intersections_data = None # Resetear datos previos
-
-            with tempfile.TemporaryDirectory() as tmpdir_traslape:
-                zip_path_traslape = os.path.join(tmpdir_traslape, "user_upload.zip")
-                with open(zip_path_traslape, "wb") as f:
-                    f.write(archivo_zip_traslape.read())
-
-                try:
-                    with zipfile.ZipFile(zip_path_traslape, "r") as zip_ref:
-                        zip_ref.extractall(tmpdir_traslape)
-                        shp_paths_user = [f for f in os.listdir(tmpdir_traslape) if f.endswith(".shp")]
-                        
-                        if not shp_paths_user:
-                            st.warning("⚠️ No se encontró ningún archivo .shp dentro del ZIP cargado. Asegúrate de que el ZIP contenga un shapefile válido.")
-                        else:
-                            with st.spinner("Procesando el shapefile cargado y calculando traslapes..."):
-                                user_shp = gpd.read_file(os.path.join(tmpdir_traslape, shp_paths_user[0])).to_crs("EPSG:4326")
-                                st.session_state.user_shp_data = user_shp # Guardar el GeoDataFrame procesado
-                                st.success("✅ Archivo cargado correctamente. Generando mapa...")
-
-                                # Reproyectar gdf_total para el cálculo de intersección
-                                gdf_total_proj = gdf_total.to_crs(epsg=9377) # Proyectar a MAGNA-SIRGAS para cálculos
-                                user_shp_proj = user_shp.to_crs(epsg=9377) # Proyectar el shapefile de usuario
-
-                                # Realizar la intersección
-                                intersecciones = gpd.overlay(gdf_total_proj, user_shp_proj, how="intersection")
-
-                                if not intersecciones.empty:
-                                    intersecciones["area_m2_interseccion"] = intersecciones.geometry.area
-                                    intersecciones["area_ha_interseccion"] = intersecciones["area_m2_interseccion"] / 10000
-
-                                    area_predio_cargado_m2 = user_shp_proj.geometry.area.sum()
-                                    
-                                    if 'area_ha' in intersecciones.columns:
-                                        intersecciones['area_territorio_ha'] = pd.to_numeric(intersecciones['area_ha'], errors='coerce').fillna(0)
-                                        intersecciones["area_territorio_m2"] = intersecciones["area_territorio_ha"] * 10000
-                                    else:
-                                        # Fallback si 'area_ha' no está en el GeoDataFrame
-                                        intersecciones["area_territorio_m2"] = intersecciones.geometry.area.copy()
-                                        st.warning("⚠️ La columna 'area_ha' no se encontró en los datos principales. Los porcentajes del territorio se calcularán con el área de la geometría, lo que puede ser inexacto para grandes extensiones.")
-                                        
-                                    intersecciones["% del predio"] = (intersecciones["area_m2_interseccion"] / area_predio_cargado_m2 * 100).round(2)
-                                    
-                                    intersecciones["% del territorio"] = (intersecciones["area_m2_interseccion"] / intersecciones["area_territorio_m2"] * 100).round(2)
-                                    intersecciones.loc[intersecciones["area_territorio_m2"] == 0, "% del territorio"] = 0
-
-                                    st.session_state.intersections_data = intersecciones
-                                else:
-                                    st.session_state.intersections_data = gpd.GeoDataFrame() # Vacío si no hay intersecciones
-                except Exception as e:
-                    st.error(f"❌ Ocurrió un error al procesar el shapefile cargado: {e}. Asegúrate de que el archivo ZIP sea un shapefile válido y completo.")
-                    st.session_state.user_shp_data = None
-                    st.session_state.intersections_data = None
-            # Forzar rerun después de procesar para que el mapa se muestre.
-            # Esto es lo que causará el "regreso" a la pestaña 1 brevemente,
-            # pero al volver a la pestaña de traslape, el mapa ya debería estar cargado.
-            st.rerun()
-
-    # Lógica de renderizado del mapa de traslape y resultados
-    # Solo se renderiza si hay datos de usuario cargados
-    if st.session_state.user_shp_data is not None:
-        user_shp = st.session_state.user_shp_data
-        intersecciones = st.session_state.intersections_data
-
-        st.markdown("#### 🗺️ Mapa del predio cargado y traslapes encontrados")
+        gdf_filtrado = gdf_filtrado.to_crs(epsg=4326)
+        bounds = gdf_filtrado.total_bounds
+        centro_lat = (bounds[1] + bounds[3]) / 2
+        centro_lon = (bounds[0] + bounds[2]) / 2
         
-        bounds_user = user_shp.total_bounds
-        center_user = [(bounds_user[1] + bounds_user[3]) / 2, (bounds_user[0] + bounds_user[2]) / 2]
-        
-        # Un zoom inicial razonable que luego será ajustado por fit_bounds
-        m_traslape = folium.Map(location=center_user, zoom_start=8, tiles="CartoDB positron")
+        # Añade un spinner mientras se genera el mapa
+        with st.spinner("Generando mapa..."):
+            m = folium.Map(location=[centro_lat, centro_lon], zoom_start=10, tiles=fondos_disponibles[fondo_seleccionado])
 
-        # Mostrar predio cargado en rojo
-        folium.GeoJson(
-            user_shp,
-            name="Polígono cargado",
-            style_function=lambda x: {
-                "color": "red",
-                "weight": 3,
-                "fillOpacity": 0.1,
-                "fillColor": "red"
-            }
-        ).add_to(m_traslape)
-
-        if not intersecciones.empty:
-            ids_intersecion = intersecciones['id_rtdaf'].unique()
-            territorios_afectados = gdf_total[gdf_total['id_rtdaf'].isin(ids_intersecion)]
-
-            def borde_tipo_traslape(feature):
-                tipo = feature["properties"]["cn_ci"].strip().lower()
-                return {
-                    "color": "#004400" if tipo == "ci" else "#663300",
-                    "weight": 1.5,
-                    "fillOpacity": 0
-                }
+            # Función de estilo para la capa principal
+            def style_function_by_tipo(feature):
+                tipo = feature["properties"]["cn_ci"]
+                color_borde = "#228B22" if tipo == "ci" else "#8B4513"
+                color_relleno = "#228B22" if tipo == "ci" else "#8B4513"
+                opacidad_relleno = 0.6 if mostrar_relleno else 0 # Controla la opacidad del relleno
+                return {"fillColor": color_relleno, "color": color_borde, "weight": 1, "fillOpacity": opacidad_relleno}
 
             folium.GeoJson(
-                territorios_afectados,
-                style_function=borde_tipo_traslape,
-                name="Territorios con traslape (borde)"
-            ).add_to(m_traslape)
-
-            def estilo_interseccion(feature):
-                tipo = feature["properties"]["cn_ci"].strip().lower()
-                return {
-                    "fillColor": "#228B22" if tipo == "ci" else "#8B4513",
-                    "color": "#228B22" if tipo == "ci" else "#8B4513",
-                    "weight": 2,
-                    "fillOpacity": 0.5
-                }
-
-            folium.GeoJson(
-                intersecciones.to_crs(epsg=4326),
+                gdf_filtrado,
+                style_function=style_function_by_tipo,
                 tooltip=folium.GeoJsonTooltip(
-                    fields=["nom_terr", "cn_ci", "area_ha_interseccion", "% del predio", "% del territorio"],
-                    aliases=["Territorio:", "Tipo:", "Área traslapada (ha):", "% del predio cargado:", "% del territorio:"],
+                    fields=["id_rtdaf", "nom_terr", "etnia", "departamen", "municipio", "etapa", "estado_act", "tipologia", "area_formateada"],
+                    aliases=["ID:", "Territorio:", "Etnia:", "Departamento:", "Municipio:", "Etapa:", "Estado:", "Tipología:", "Área:"],
                     localize=True
-                ),
-                style_function=estilo_interseccion,
-                name="Áreas de traslape (relleno)"
-            ).add_to(m_traslape)
+                )
+            ).add_to(m)
 
-            # Leyenda para el mapa de traslape (¡CORREGIDA y probada!)
-            leyenda_traslape_html = '''
+            leyenda_html = '''
             <div style="position: absolute; top: 10px; left: 10px; z-index: 9999;
-                        background-color: white; padding: 10px; border: 1px solid #ccc;
-                        font-size: 14px; box-shadow: 2px 2px 4px rgba(0,0,0,0.1); color: black;">
-                <strong>Leyenda Traslape</strong><br>
-                <span style="color:red; font-weight:bold;">■</span> Polígono cargado<br>
-                <span style="color:#228B22; font-weight:bold;">■</span> Área traslapada (CI)<br>
-                <span style="color:#8B4513; font-weight:bold;">■</span> Área traslapada (CN)<br>
-                <span style="color:#004400; font-weight:bold;">━</span> Borde territorio CI<br>
-                <span style="color:#663300; font-weight:bold;">━</span> Borde territorio CN
+                         background-color: white; padding: 10px; border: 1px solid #ccc;
+                         font-size: 14px; box-shadow: 2px 2px 4px rgba(0,0,0,0.1);">
+                <strong>Leyenda</strong><br>
+                🟢 Comunidades Indigenas (ci)<br>
+                🟤 Comunidades negras, afrocolombianas, raizales y palenqueras (cn)
             </div>
             '''
-            m_traslape.get_root().html.add_child(folium.Element(leyenda_traslape_html))
-
-            all_bounds = pd.concat([user_shp, intersecciones.to_crs(epsg=4326)]).total_bounds
-            m_traslape.fit_bounds([[all_bounds[1], all_bounds[0]], [all_bounds[3], all_bounds[2]]])
-            
-            st_folium(m_traslape, width=1200, height=600)
-
-            st.subheader("📋 Detalles del traslape")
-            tabla_traslape = intersecciones[[
-                "id_rtdaf", "nom_terr", "cn_ci", "departamen", "municipio",
-                "area_ha_interseccion", "% del predio", "% del territorio"
-            ]].rename(columns={
-                "area_ha_interseccion": "Área Traslapada (ha)",
-                "nom_terr": "Nombre Territorio",
-                "cn_ci": "Tipo Territorio",
-                "id_rtdaf": "ID Territorio",
-                "departamen": "Departamento",
-                "municipio": "Municipio"
-            })
-            tabla_traslape["Área Traslapada (ha)"] = tabla_traslape["Área Traslapada (ha)"].round(2)
-            st.dataframe(tabla_traslape)
-
-            with st.expander("📥 Opciones de descarga del traslape"):
-                csv_traslape = tabla_traslape.to_csv(index=False).encode("utf-8")
-                st.download_button(
-                    "⬇️ Descargar CSV del traslape",
-                    data=csv_traslape,
-                    file_name="reporte_traslape.csv",
-                    mime="text/csv"
-                )
-                
-                with tempfile.TemporaryDirectory() as tmpdir_interseccion:
-                    shp_interseccion_path = os.path.join(tmpdir_interseccion, "intersecciones.shp")
-                    intersecciones.to_crs(epsg=4326).to_file(shp_interseccion_path)
-                    zip_interseccion_path = shutil.make_archive(shp_interseccion_path.replace(".shp", ""), 'zip', tmpdir_interseccion)
-                    with open(zip_interseccion_path, "rb") as f:
-                        st.download_button(
-                            label="⬇️ Descargar SHP de la intersección (.zip)",
-                            data=f,
-                            file_name="intersecciones.zip",
-                            mime="application/zip"
-                        )
-
-        else:
-            st.info("✅ No se encontraron traslapes con territorios formalizados.")
+            m.get_root().html.add_child(folium.Element(leyenda_html))
+            m.fit_bounds([[bounds[1], bounds[0]], [bounds[3], bounds[2]]])
+            st_folium(m, width=1200, height=600)
     else:
-        st.info("Carga un archivo .zip para ver el traslape.")
+        st.warning("⚠️ No se encontraron territorios que coincidan con los filtros aplicados. Por favor, ajusta tus selecciones.")
 
+    st.subheader("📋 Resultados filtrados")
+    if not gdf_filtrado.empty:
+        st.dataframe(gdf_filtrado.drop(columns=["geometry", "area_formateada"]))
+
+        # Estadísticas
+        total_territorios = len(gdf_filtrado)
+        area_total = gdf_filtrado["area_ha"].sum()
+        hectareas = int(area_total)
+        metros2 = int(round((area_total - hectareas) * 10000))
+        cuenta_ci = (gdf_filtrado["cn_ci"] == "ci").sum()
+        cuenta_cn = (gdf_filtrado["cn_ci"] == "cn").sum()
+
+        st.markdown(
+            f'''
+            <div style='
+                margin-top: 1em;
+                margin-bottom: 1.5em;
+                padding: 0.7em;
+                background-color: #e8f5e9;
+                border-radius: 8px;
+                font-size: 16px;
+                color: #2e7d32;'>
+                <strong>📊 Estadísticas del resultado:</strong><br>
+                Territorios filtrados: <strong>{total_territorios}</strong><br>
+                ▸ Comunidades indígenas (ci): <strong>{cuenta_ci}</strong><br>
+                ▸ Consejos comunitarios (cn): <strong>{cuenta_cn}</strong><br>
+                Área Cartográfica: <strong>{hectareas} ha + {metros2:} m²</strong>
+            </div>
+            ''',
+            unsafe_allow_html=True
+        )
+        with st.expander("📥 Opciones de descarga"):
+            # Descargar shapefile filtrado como ZIP
+            with tempfile.TemporaryDirectory() as tmpdir:
+                shp_path = os.path.join(tmpdir, "territorios.shp")
+                gdf_filtrado.to_file(shp_path)
+                zip_path = shutil.make_archive(shp_path.replace(".shp", ""), 'zip', tmpdir)
+                with open(zip_path, "rb") as f:
+                    st.download_button(
+                        label="📆 Descargar shapefile filtrado (.zip)",
+                        data=f,
+                        file_name="territorios_filtrados.zip",
+                        mime="application/zip"
+                    )
+
+            # Descargar mapa como HTML
+            html_bytes = m.get_root().render().encode("utf-8")
+            st.download_button(
+                label="🌐 Descargar mapa",
+                data=html_bytes,
+                file_name="mapa_filtrado.html",
+                mime="text/html"
+            )
+
+            # Descargar resultados como CSV
+            csv_data = gdf_filtrado.drop(columns=["geometry"]).to_csv(index=False).encode("utf-8")
+            st.download_button(
+                label="📄 Descargar tabla como CSV",
+                data=csv_data,
+                file_name="resultados_filtrados.csv",
+                mime="text/csv"
+            )
+    else:
+        st.info("No hay datos para mostrar en la tabla o descargar con los filtros actuales.")
 
 # --- Footer global para la pantalla principal del visor ---
 st.markdown(
@@ -639,3 +432,4 @@ st.markdown(
     """,
     unsafe_allow_html=True
 )
+
