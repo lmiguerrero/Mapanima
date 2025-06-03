@@ -355,10 +355,10 @@ with tab1:
                 leyenda_html = '''
                 <div style="position: absolute; top: 10px; left: 10px; z-index: 9999;
                             background-color: white; padding: 10px; border: 1px solid #ccc;
-                            font-size: 14px; box-shadow: 2px 2px 4px rgba(0,0,0,0.1);">
+                            font-size: 14px; box-shadow: 2px 2px 4px rgba(0,0,0,0.1); color: black;">
                     <strong>Leyenda</strong><br>
-                    🟢 Comunidades Indigenas (ci)<br>
-                    🟤 Comunidades negras, afrocolombianas, raizales y palenqueras (cn)
+                    <span style="color:#228B22; font-weight:bold;">■</span> Comunidades Indigenas (ci)<br>
+                    <span style="color:#8B4513; font-weight:bold;">■</span> Comunidades negras, afrocolombianas, raizales y palenqueras (cn)
                 </div>
                 '''
                 m.get_root().html.add_child(folium.Element(leyenda_html))
@@ -549,15 +549,15 @@ with tab2:
                                     name="Áreas de traslape (relleno)"
                                 ).add_to(m_traslape)
 
-                                # Añadir una leyenda para el mapa de traslape
+                                # Leyenda para el mapa de traslape
                                 leyenda_traslape_html = '''
                                 <div style="position: absolute; top: 10px; left: 10px; z-index: 9999;
                                             background-color: white; padding: 10px; border: 1px solid #ccc;
-                                            font-size: 14px; box-shadow: 2px 2px 4px rgba(0,0,0,0.1);">
+                                            font-size: 14px; box-shadow: 2px 2px 4px rgba(0,0,0,0.1); color: black;">
                                     <strong>Leyenda Traslape</strong><br>
-                                    🟥 Polígono cargado<br>
-                                    🟢 Área traslapada (CI)<br>
-                                    🟤 Área traslapada (CN)<br>
+                                    <span style="color:red; font-weight:bold;">■</span> Polígono cargado<br>
+                                    <span style="color:#228B22; font-weight:bold;">■</span> Área traslapada (CI)<br>
+                                    <span style="color:#8B4513; font-weight:bold;">■</span> Área traslapada (CN)<br>
                                     <span style="color:#004400; font-weight:bold;">━</span> Borde territorio CI<br>
                                     <span style="color:#663300; font-weight:bold;">━</span> Borde territorio CN
                                 </div>
