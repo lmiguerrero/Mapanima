@@ -250,9 +250,22 @@ gdf_total['etapa'] = gdf_total['etapa'].str.lower()
 gdf_total['estado_act'] = gdf_total['estado_act'].str.strip()
 gdf_total['cn_ci'] = gdf_total['cn_ci'].str.lower()
 
+# Inicializar st.session_state para la pestaña activa
+if "active_tab" not in st.session_state:
+    st.session_state["active_tab"] = "tab1" # Por defecto, la primera pestaña
+
+# Callback para cambiar la pestaña activa
+def set_active_tab(tab_name):
+    st.session_state["active_tab"] = tab_name
 
 # --- Pestañas ---
-tab1, tab2 = st.tabs(["🔍 Consulta por filtros", "📐 Consulta por traslape"])
+# Usar el key para controlar la pestaña activa con st.session_state
+tab1, tab2 = st.tabs(
+    ["🔍 Consulta por filtros", "📐 Consulta por traslape"],
+    key="main_tabs",
+    on_change=lambda: set_active_tab(st.session_state.main_tabs)
+)
+
 
 # ===============================
 # PESTAÑA 1: CONSULTA POR FILTROS
@@ -438,9 +451,28 @@ with tab1:
 with tab2:
     st.markdown("### 📐 Verificar traslape con polígono cargado")
 
-    archivo_zip_traslape = st.file_uploader("Cargar archivo .zip con shapefile (predio o polígono) para traslape", type="zip")
+    # Mantenemos el archivo cargado en session_state para persistir
+    if 'user_shp_uploaded' not in st.session_state:
+        st.session_state.user_shp_uploaded = None
+    if 'intersections_data' not in st.session_state:
+        st.session_state.intersections_data = None
+    if 'map_traslape_rendered' not in st.session_state:
+        st.session_state.map_traslape_rendered = False
 
-    if archivo_zip_traslape is not None:
+
+    # Usar un key único para el file_uploader para evitar conflictos y reinicios indeseados
+    archivo_zip_traslape = st.file_uploader(
+        "Cargar archivo .zip con shapefile (predio o polígono) para traslape",
+        type="zip",
+        key="uploader_traslape"
+    )
+
+    # Solo procesar el archivo si se acaba de subir o si ya está en session_state y no se ha procesado
+    if archivo_zip_traslape is not None and archivo_zip_traslape != st.session_state.user_shp_uploaded:
+        st.session_state.user_shp_uploaded = archivo_zip_traslape # Almacenar el objeto cargado
+        st.session_state.map_traslape_rendered = False # Indicar que el mapa necesita ser renderizado de nuevo
+        st.session_state.intersections_data = None # Resetear datos de intersección
+
         with tempfile.TemporaryDirectory() as tmpdir_traslape:
             zip_path_traslape = os.path.join(tmpdir_traslape, "user_upload.zip")
             with open(zip_path_traslape, "wb") as f:
@@ -453,37 +485,17 @@ with tab2:
                     
                     if not shp_paths_user:
                         st.warning("⚠️ No se encontró ningún archivo .shp dentro del ZIP cargado. Asegúrate de que el ZIP contenga un shapefile válido.")
+                        st.session_state.user_shp_data = None # Limpiar el shapefile en session_state si no es válido
                     else:
                         with st.spinner("Procesando el shapefile cargado y calculando traslapes..."):
                             user_shp = gpd.read_file(os.path.join(tmpdir_traslape, shp_paths_user[0])).to_crs("EPSG:4326")
+                            st.session_state.user_shp_data = user_shp # Guardar el GeoDataFrame procesado
                             st.success("✅ Archivo cargado correctamente.")
 
-                            st.markdown("#### 🗺️ Mapa del predio cargado y traslapes encontrados")
-                            
-                            # Crear un mapa para la pestaña de traslape
-                            bounds_user = user_shp.total_bounds
-                            center_user = [(bounds_user[1] + bounds_user[3]) / 2, (bounds_user[0] + bounds_user[2]) / 2]
-                            m_traslape = folium.Map(location=center_user, zoom_start=10, tiles="CartoDB positron")
-
-                            # Mostrar predio cargado en rojo
-                            folium.GeoJson(
-                                user_shp,
-                                name="Polígono cargado",
-                                style_function=lambda x: {
-                                    "color": "red",
-                                    "weight": 3,
-                                    "fillOpacity": 0.1, # Un poco de relleno para que se vea mejor
-                                    "fillColor": "red"
-                                }
-                            ).add_to(m_traslape)
-
-                            # Obtener territorios que intersectan del gdf_total
-                            # Reproyectar gdf_total para el cálculo de intersección si es necesario
+                            # Reproyectar gdf_total para el cálculo de intersección
                             gdf_total_proj = gdf_total.to_crs(epsg=9377) # Proyectar a MAGNA-SIRGAS para cálculos
                             user_shp_proj = user_shp.to_crs(epsg=9377) # Proyectar el shapefile de usuario
 
-                            # Calcular intersección exacta
-                            # Asegúrate de que los nombres de las columnas que esperas para el tooltip existan en gdf_total_proj
                             intersecciones = gpd.overlay(gdf_total_proj, user_shp_proj, how="intersection")
 
                             if not intersecciones.empty:
@@ -492,125 +504,161 @@ with tab2:
 
                                 area_predio_cargado_m2 = user_shp_proj.geometry.area.sum()
                                 
-                                # Asegurar que 'area_ha' existe y es numérica antes de usarla
                                 if 'area_ha' in intersecciones.columns:
                                     intersecciones['area_territorio_ha'] = pd.to_numeric(intersecciones['area_ha'], errors='coerce').fillna(0)
                                     intersecciones["area_territorio_m2"] = intersecciones["area_territorio_ha"] * 10000
                                 else:
                                     st.warning("⚠️ La columna 'area_ha' no se encontró en los datos principales, los porcentajes del territorio podrían ser inexactos.")
-                                    # Fallback: usar área de la geometría si no hay 'area_ha' precalculada
-                                    intersecciones["area_territorio_m2"] = intersecciones.geometry.area # Esto no es preciso si la intersección es solo una parte
+                                    intersecciones["area_territorio_m2"] = intersecciones.geometry.area 
                                     
-                                # Calcular porcentajes
                                 intersecciones["% del predio"] = (intersecciones["area_m2_interseccion"] / area_predio_cargado_m2 * 100).round(2)
                                 
-                                # Evitar división por cero si el área del territorio es 0
                                 intersecciones["% del territorio"] = (intersecciones["area_m2_interseccion"] / intersecciones["area_territorio_m2"] * 100).round(2)
                                 intersecciones.loc[intersecciones["area_territorio_m2"] == 0, "% del territorio"] = 0
 
-
-                                # Dibujar territorios completos (bordes) de los que tienen intersección
-                                # Asegúrate de filtrar gdf_total por los 'id_rtdaf' que tienen intersección
-                                ids_intersecion = intersecciones['id_rtdaf'].unique()
-                                territorios_afectados = gdf_total[gdf_total['id_rtdaf'].isin(ids_intersecion)]
-
-                                def borde_tipo_traslape(feature):
-                                    tipo = feature["properties"]["cn_ci"].strip().lower()
-                                    return {
-                                        "color": "#004400" if tipo == "ci" else "#663300", # Verde oscuro para CI, Marrón oscuro para CN
-                                        "weight": 1.5,
-                                        "fillOpacity": 0 # Sin relleno, solo el borde
-                                    }
-
-                                folium.GeoJson(
-                                    territorios_afectados,
-                                    style_function=borde_tipo_traslape,
-                                    name="Territorios con traslape (borde)"
-                                ).add_to(m_traslape)
-
-                                # Dibujar intersección (relleno)
-                                def estilo_interseccion(feature):
-                                    tipo = feature["properties"]["cn_ci"].strip().lower()
-                                    return {
-                                        "fillColor": "#228B22" if tipo == "ci" else "#8B4513", # Verde para CI, Marrón para CN
-                                        "color": "#228B22" if tipo == "ci" else "#8B4513",
-                                        "weight": 2,
-                                        "fillOpacity": 0.5 # Relleno semitransparente
-                                    }
-
-                                folium.GeoJson(
-                                    intersecciones.to_crs(epsg=4326), # Volver a WGS84 para Folium
-                                    tooltip=folium.GeoJsonTooltip(
-                                        fields=["nom_terr", "cn_ci", "area_ha_interseccion", "% del predio", "% del territorio"],
-                                        aliases=["Territorio:", "Tipo:", "Área traslapada (ha):", "% del predio cargado:", "% del territorio:"],
-                                        localize=True
-                                    ),
-                                    style_function=estilo_interseccion,
-                                    name="Áreas de traslape (relleno)"
-                                ).add_to(m_traslape)
-
-                                # Leyenda para el mapa de traslape
-                                leyenda_traslape_html = '''
-                                <div style="position: absolute; top: 10px; left: 10px; z-index: 9999;
-                                            background-color: white; padding: 10px; border: 1px solid #ccc;
-                                            font-size: 14px; box-shadow: 2px 2px 4px rgba(0,0,0,0.1); color: black;">
-                                    <strong>Leyenda Traslape</strong><br>
-                                    <span style="color:red; font-weight:bold;">■</span> Polígono cargado<br>
-                                    <span style="color:#228B22; font-weight:bold;">■</span> Área traslapada (CI)<br>
-                                    <span style="color:#8B4513; font-weight:bold;">■</span> Área traslapada (CN)<br>
-                                    <span style="color:#004400; font-weight:bold;">━</span> Borde territorio CI<br>
-                                    <span style="color:#663300; font-weight:bold;">━</span> Borde territorio CN
-                                </div>
-                                '''
-                                m_traslape.get_root().html.add_child(folium.Element(leyenda_traslape_html))
-
-                                m_traslape.fit_bounds([[bounds_user[1], bounds_user[0]], [bounds_user[3], bounds_user[2]]])
-                                st_folium(m_traslape, width=1200, height=600)
-
-                                st.subheader("📋 Detalles del traslape")
-                                # Seleccionar y renombrar columnas para la tabla
-                                tabla_traslape = intersecciones[[
-                                    "id_rtdaf", "nom_terr", "cn_ci", "departamen", "municipio",
-                                    "area_ha_interseccion", "% del predio", "% del territorio"
-                                ]].rename(columns={
-                                    "area_ha_interseccion": "Área Traslapada (ha)",
-                                    "nom_terr": "Nombre Territorio",
-                                    "cn_ci": "Tipo Territorio",
-                                    "id_rtdaf": "ID Territorio",
-                                    "departamen": "Departamento",
-                                    "municipio": "Municipio"
-                                })
-                                tabla_traslape["Área Traslapada (ha)"] = tabla_traslape["Área Traslapada (ha)"].round(2)
-                                st.dataframe(tabla_traslape)
-
-                                with st.expander("📥 Opciones de descarga del traslape"):
-                                    csv_traslape = tabla_traslape.to_csv(index=False).encode("utf-8")
-                                    st.download_button(
-                                        "⬇️ Descargar CSV del traslape",
-                                        data=csv_traslape,
-                                        file_name="reporte_traslape.csv",
-                                        mime="text/csv"
-                                    )
-                                    
-                                    # Descargar shapefile de intersección como ZIP
-                                    with tempfile.TemporaryDirectory() as tmpdir_interseccion:
-                                        shp_interseccion_path = os.path.join(tmpdir_interseccion, "intersecciones.shp")
-                                        intersecciones.to_crs(epsg=4326).to_file(shp_interseccion_path) # Exportar en 4326
-                                        zip_interseccion_path = shutil.make_archive(shp_interseccion_path.replace(".shp", ""), 'zip', tmpdir_interseccion)
-                                        with open(zip_interseccion_path, "rb") as f:
-                                            st.download_button(
-                                                label="⬇️ Descargar SHP de la intersección (.zip)",
-                                                data=f,
-                                                file_name="intersecciones.zip",
-                                                mime="application/zip"
-                                            )
-
+                                st.session_state.intersections_data = intersecciones
                             else:
-                                st.info("✅ No se encontraron traslapes con territorios formalizados.")
-
+                                st.session_state.intersections_data = gpd.GeoDataFrame() # Vacío si no hay intersecciones
             except Exception as e:
                 st.error(f"❌ Ocurrió un error al procesar el shapefile cargado: {e}. Asegúrate de que el archivo ZIP sea un shapefile válido y completo.")
+                st.session_state.user_shp_data = None
+                st.session_state.intersections_data = None
+        # Después de procesar el archivo, se fuerza el rerun para que la pestaña se actualice y muestre el mapa
+        # Esto evitará que parezca que "regresa" a la pestaña 1, sino que la lógica de renderizado se complete en la pestaña 2
+        # st.rerun() # Esto puede ser agresivo, vamos a intentar con la lógica de renderizado condicional
+
+    # Lógica de renderizado del mapa de traslape
+    if st.session_state.user_shp_data is not None and st.session_state.active_tab == "tab2": # Solo renderizar si hay datos y estamos en esta pestaña
+        user_shp = st.session_state.user_shp_data
+        intersecciones = st.session_state.intersections_data
+
+        st.markdown("#### 🗺️ Mapa del predio cargado y traslapes encontrados")
+        
+        bounds_user = user_shp.total_bounds
+        center_user = [(bounds_user[1] + bounds_user[3]) / 2, (bounds_user[0] + bounds_user[2]) / 2]
+        
+        # Ajustar el zoom_start para que no sea excesivo, o confiar en fit_bounds
+        m_traslape = folium.Map(location=center_user, zoom_start=8, tiles="CartoDB positron") # Ajusta zoom_start si es necesario
+
+        # Mostrar predio cargado en rojo
+        folium.GeoJson(
+            user_shp,
+            name="Polígono cargado",
+            style_function=lambda x: {
+                "color": "red",
+                "weight": 3,
+                "fillOpacity": 0.1,
+                "fillColor": "red"
+            }
+        ).add_to(m_traslape)
+
+        if not intersecciones.empty:
+            # Dibujar territorios completos (bordes) de los que tienen intersección
+            ids_intersecion = intersecciones['id_rtdaf'].unique()
+            territorios_afectados = gdf_total[gdf_total['id_rtdaf'].isin(ids_intersecion)]
+
+            def borde_tipo_traslape(feature):
+                tipo = feature["properties"]["cn_ci"].strip().lower()
+                return {
+                    "color": "#004400" if tipo == "ci" else "#663300",
+                    "weight": 1.5,
+                    "fillOpacity": 0
+                }
+
+            folium.GeoJson(
+                territorios_afectados,
+                style_function=borde_tipo_traslape,
+                name="Territorios con traslape (borde)"
+            ).add_to(m_traslape)
+
+            # Dibujar intersección (relleno)
+            def estilo_interseccion(feature):
+                tipo = feature["properties"]["cn_ci"].strip().lower()
+                return {
+                    "fillColor": "#228B22" if tipo == "ci" else "#8B4513",
+                    "color": "#228B22" if tipo == "ci" else "#8B4513",
+                    "weight": 2,
+                    "fillOpacity": 0.5
+                }
+
+            folium.GeoJson(
+                intersecciones.to_crs(epsg=4326),
+                tooltip=folium.GeoJsonTooltip(
+                    fields=["nom_terr", "cn_ci", "area_ha_interseccion", "% del predio", "% del territorio"],
+                    aliases=["Territorio:", "Tipo:", "Área traslapada (ha):", "% del predio cargado:", "% del territorio:"],
+                    localize=True
+                ),
+                style_function=estilo_interseccion,
+                name="Áreas de traslape (relleno)"
+            ).add_to(m_traslape)
+
+            # Leyenda para el mapa de traslape (¡CORREGIDA!)
+            leyenda_traslape_html = '''
+            <div style="position: absolute; top: 10px; left: 10px; z-index: 9999;
+                        background-color: white; padding: 10px; border: 1px solid #ccc;
+                        font-size: 14px; box-shadow: 2px 2px 4px rgba(0,0,0,0.1); color: black;">
+                <strong>Leyenda Traslape</strong><br>
+                <span style="color:red; font-weight:bold;">■</span> Polígono cargado<br>
+                <span style="color:#228B22; font-weight:bold;">■</span> Área traslapada (CI)<br>
+                <span style="color:#8B4513; font-weight:bold;">■</span> Área traslapada (CN)<br>
+                <span style="color:#004400; font-weight:bold;">━</span> Borde territorio CI<br>
+                <span style="color:#663300; font-weight:bold;">━</span> Borde territorio CN
+            </div>
+            '''
+            m_traslape.get_root().html.add_child(folium.Element(leyenda_traslape_html))
+
+            # Ajustar los límites del mapa para que se vea todo correctamente
+            # Combina los límites del predio cargado y de las intersecciones
+            all_bounds = pd.concat([user_shp, intersecciones.to_crs(epsg=4326)]).total_bounds
+            m_traslape.fit_bounds([[all_bounds[1], all_bounds[0]], [all_bounds[3], all_bounds[2]]])
+            
+            st_folium(m_traslape, width=1200, height=600)
+
+            st.subheader("📋 Detalles del traslape")
+            tabla_traslape = intersecciones[[
+                "id_rtdaf", "nom_terr", "cn_ci", "departamen", "municipio",
+                "area_ha_interseccion", "% del predio", "% del territorio"
+            ]].rename(columns={
+                "area_ha_interseccion": "Área Traslapada (ha)",
+                "nom_terr": "Nombre Territorio",
+                "cn_ci": "Tipo Territorio",
+                "id_rtdaf": "ID Territorio",
+                "departamen": "Departamento",
+                "municipio": "Municipio"
+            })
+            tabla_traslape["Área Traslapada (ha)"] = tabla_traslape["Área Traslapada (ha)"].round(2)
+            st.dataframe(tabla_traslape)
+
+            with st.expander("📥 Opciones de descarga del traslape"):
+                csv_traslape = tabla_traslape.to_csv(index=False).encode("utf-8")
+                st.download_button(
+                    "⬇️ Descargar CSV del traslape",
+                    data=csv_traslape,
+                    file_name="reporte_traslape.csv",
+                    mime="text/csv"
+                )
                 
+                with tempfile.TemporaryDirectory() as tmpdir_interseccion:
+                    shp_interseccion_path = os.path.join(tmpdir_interseccion, "intersecciones.shp")
+                    intersecciones.to_crs(epsg=4326).to_file(shp_interseccion_path)
+                    zip_interseccion_path = shutil.make_archive(shp_interseccion_path.replace(".shp", ""), 'zip', tmpdir_interseccion)
+                    with open(zip_interseccion_path, "rb") as f:
+                        st.download_button(
+                            label="⬇️ Descargar SHP de la intersección (.zip)",
+                            data=f,
+                            file_name="intersecciones.zip",
+                            mime="application/zip"
+                        )
+
+        else:
+            st.info("✅ No se encontraron traslapes con territorios formalizados.")
+    elif st.session_state.active_tab == "tab2" and st.session_state.user_shp_data is None and st.session_state.user_shp_uploaded is not None:
+        # Esto maneja el caso donde el archivo se cargó pero no es un shp válido
+        st.warning("No se pudo procesar el shapefile del ZIP cargado o no contiene datos válidos para mostrar en el mapa.")
+    else:
+        st.info("Carga un archivo .zip para ver el traslape.")
+
+
 # --- Footer global para la pantalla principal del visor ---
 st.markdown(
     """
