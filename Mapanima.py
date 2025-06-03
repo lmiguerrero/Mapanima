@@ -191,28 +191,38 @@ def descargar_y_cargar_zip(url):
                             st.error(f"❌ Error crítico: No se pudo cargar el shapefile ni con encoding predeterminado ni con 'latin1'. (Detalle: {e_latin1})")
                             return None
                     
-                    # Asegurarse de que el GeoDataFrame esté en CRS 4326 para Folium
-                    if gdf is not None and gdf.crs != "EPSG:4326":
-                        st.info("ℹ️ Reproyectando datos a EPSG:4326 para compatibilidad con el mapa.")
-                        gdf = gdf.to_crs(epsg=4326)
-                    
-                    # --- INICIO DEL CAMBIO DE CÁLCULO DE ÁREA ---
+                    # --- MEJORA PARA CÁLCULO DE ÁREA PRECISO EN CTM12 ---
                     if gdf is not None:
+                        # Si no hay CRS, o no es un CRS proyectado, intentar establecer un CRS por defecto si es necesario para el área
+                        # Para CTM12/EPSG:9377 como default para Colombia
+                        if gdf.crs is None and "EPSG:9377" in str(st.secrets.get("DEFAULT_CRS_FOR_AREA", "EPSG:9377")):
+                            st.info("ℹ️ CRS no detectado en el shapefile principal. Asumiendo EPSG:9377 para cálculo de área.")
+                            gdf.set_crs(epsg=9377, allow_override=True, inplace=True)
+
                         if 'area_ha' not in gdf.columns:
                             st.warning("⚠️ La columna 'area_ha' no fue encontrada en los datos principales. Calculando el área en hectáreas de los polígonos con reproyección para mayor precisión.")
-                            # Reproyectar a EPSG:3857 (Web Mercator) para calcular el área en metros cuadrados
-                            gdf_proj = gdf.to_crs(epsg=3857) 
+                            
+                            gdf_for_area_calc = gdf.copy()
+                            # Reproyectar a EPSG:9377 (CTM12) si no está ya en un CRS proyectado en metros
+                            if gdf_for_area_calc.crs is None or gdf_for_area_calc.crs.is_geographic or (gdf_for_area_calc.crs.is_projected and gdf_for_area_calc.crs.to_epsg() != 9377):
+                                st.info(f"Reproyectando temporalmente a EPSG:9377 para el cálculo de área.")
+                                gdf_for_area_calc = gdf_for_area_calc.to_crs(epsg=9377)
+                            
                             # Calcular área en m^2 y convertir a hectáreas (1 ha = 10,000 m^2)
-                            gdf['area_ha'] = (gdf_proj.geometry.area / 10000).round(2) 
+                            gdf['area_ha'] = (gdf_for_area_calc.geometry.area / 10000).round(2) 
                         else:
                             # Si 'area_ha' ya existe, asegurarse de que sea numérica y sin NaN
                             gdf['area_ha'] = pd.to_numeric(gdf['area_ha'], errors='coerce').fillna(0).round(2)
-                    # --- FIN DEL CAMBIO DE CÁLCULO DE ÁREA ---
+                    # --- FIN MEJORA PARA CÁLCULO DE ÁREA PRECISO EN CTM12 ---
+
+                    # Asegurarse de que el GeoDataFrame final esté en CRS 4326 para Folium
+                    if gdf is not None and gdf.crs != "EPSG:4326":
+                        st.info("ℹ️ Reproyectando datos a EPSG:4326 para compatibilidad con el mapa.")
+                        gdf = gdf.to_crs(epsg=4326)
 
                     # Rellenar valores NaN con una cadena vacía y luego convertir todas las columnas no geométricas a tipo string
                     if gdf is not None:
                         for col in gdf.columns:
-                            # Evitar convertir 'area_ha' y la columna de geometría a string
                             if col != gdf.geometry.name and col != 'area_ha': 
                                 gdf[col] = gdf[col].fillna('').astype(str) 
 
@@ -234,12 +244,12 @@ def descargar_y_cargar_zip(url):
 def onedrive_a_directo(url_onedrive):
     if "1drv.ms" in url_onedrive:
         try:
-            r = requests.get(url_onedrive, allow_redirects=True, timeout=10) # Añadir timeout
+            r = requests.get(url_onedrive, allow_redirects=True, timeout=10) 
             r.raise_for_status()
             return r.url.replace("redir?", "download?").replace("redir=", "download=")
         except requests.exceptions.RequestException as e:
             st.error(f"❌ Error al convertir URL de OneDrive a directa: {e}. Asegúrate de que la URL sea válida y accesible.")
-            return url_onedrive # Retorna la original si falla la conversión
+            return url_onedrive 
     return url_onedrive
 
 # --- Cargar datos principales ---
@@ -247,13 +257,11 @@ url_zip = onedrive_a_directo(st.secrets["URL_ZIP"])
 gdf_total = descargar_y_cargar_zip(url_zip)
 
 # --- Banner superior del visor ya autenticado ---
-# Solo se muestra si el usuario está autenticado
 if "autenticado" in st.session_state and st.session_state["autenticado"]:
     with st.container():
         st.image("GEOVISOR.png", use_container_width=True)
 
 # --- PESTAÑAS ---
-# Solo se muestran si el usuario está autenticado
 if "autenticado" in st.session_state and st.session_state["autenticado"]:
     tabs = st.tabs(["🗺️ Visor principal", "📐 Análisis de traslape"])
 
@@ -261,19 +269,15 @@ if "autenticado" in st.session_state and st.session_state["autenticado"]:
     with tabs[0]:
         if gdf_total is None:
             st.warning("⚠️ No se pudieron cargar los datos geográficos principales. El visor no puede funcionar sin ellos.")
-            st.stop() # Detiene la ejecución si los datos principales no se cargaron
+            st.stop() 
 
         st.subheader("🗺️ Visor de territorios étnicos")
         st.markdown("Filtros, mapa y descarga de información cartográfica según filtros aplicados.")
 
-        # Continuar solo si gdf_total se cargó correctamente
-        # Normalizar algunas columnas para filtrado consistente
-        # Asegúrate de que estas columnas existan en tu gdf_total
         for col_name in ['etapa', 'estado_act', 'cn_ci', 'departamen', 'nom_terr', 'id_rtdaf', 'tipologia']:
             if col_name in gdf_total.columns:
                 gdf_total[col_name] = gdf_total[col_name].astype(str).str.lower().fillna('')
             else:
-                # Si la columna no existe, crearla como vacía para evitar errores
                 gdf_total[col_name] = '' 
         
         st.sidebar.header("🎯 Filtros")
@@ -296,7 +300,6 @@ if "autenticado" in st.session_state and st.session_state["autenticado"]:
         }
         fondo_seleccionado = st.sidebar.selectbox("🗺️ Fondo del mapa", list(fondos_disponibles.keys()), index=1)
 
-        # --- Opción para mostrar/ocultar relleno de polígonos ---
         st.sidebar.header("🎨 Estilos del Mapa")
         mostrar_relleno = st.sidebar.checkbox("Mostrar relleno de polígonos", value=True)
 
@@ -304,7 +307,6 @@ if "autenticado" in st.session_state and st.session_state["autenticado"]:
         usar_simplify = st.sidebar.checkbox("Simplificar geometría", value=True)
         tolerancia = st.sidebar.slider("Nivel de simplificación", 0.00001, 0.001, 0.0001, step=0.00001, format="%.5f")
 
-        # Usar st.session_state para controlar cuándo se muestra el mapa
         if "mostrar_mapa" not in st.session_state:
             st.session_state["mostrar_mapa"] = False
 
@@ -320,7 +322,6 @@ if "autenticado" in st.session_state and st.session_state["autenticado"]:
         if st.session_state["mostrar_mapa"]:
             gdf_filtrado = gdf_total.copy()
             
-            # Aplicar filtros
             if etapa_sel:
                 gdf_filtrado = gdf_filtrado[gdf_filtrado["etapa"].isin(etapa_sel)]
             if estado_sel:
@@ -330,15 +331,12 @@ if "autenticado" in st.session_state and st.session_state["autenticado"]:
             if depto_sel:
                 gdf_filtrado = gdf_filtrado[gdf_filtrado["departamen"].isin(depto_sel)]
             
-            # Filtro de texto para ID
             if id_buscar:
                 gdf_filtrado = gdf_filtrado[gdf_filtrado["id_rtdaf"].astype(str).str.contains(id_buscar, case=False, na=False)]
             
-            # Filtro de selección para nombre
             if nombre_seleccionado and nombre_seleccionado != "":
                 gdf_filtrado = gdf_filtrado[gdf_filtrado["nom_terr"] == nombre_seleccionado]
 
-            # Simplificar geometría si se seleccionó
             if usar_simplify and not gdf_filtrado.empty:
                 st.info(f"Geometrías simplificadas con tolerancia de {tolerancia}")
                 gdf_filtrado["geometry"] = gdf_filtrado["geometry"].simplify(tolerancia, preserve_topology=True)
@@ -346,12 +344,10 @@ if "autenticado" in st.session_state and st.session_state["autenticado"]:
             st.subheader("🗺️ Mapa filtrado")
 
             if not gdf_filtrado.empty:
-                # Formatear el área para el tooltip
                 gdf_filtrado["area_formateada"] = gdf_filtrado["area_ha"].apply(
                     lambda ha: f"{int(ha)} ha + {int(round((ha - int(ha)) * 10000)):,} m²" if ha >= 0 else "N/A"
                 )
 
-                # Recalcular centroide y límites para el mapa
                 bounds = gdf_filtrado.total_bounds
                 centro_lat = (bounds[1] + bounds[3]) / 2
                 centro_lon = (bounds[0] + bounds[2]) / 2
@@ -359,12 +355,11 @@ if "autenticado" in st.session_state and st.session_state["autenticado"]:
                 with st.spinner("Generando mapa..."):
                     m = folium.Map(location=[centro_lat, centro_lon], zoom_start=8, tiles=fondos_disponibles[fondo_seleccionado])
 
-                    # Función de estilo para la capa principal
                     def style_function_by_tipo(feature):
-                        tipo = feature["properties"].get("cn_ci", "").lower() # Usar .get y lower para seguridad
-                        color_borde = "#228B22" if tipo == "ci" else "#8B4513" # Verde para CI, Marrón para CN
-                        color_relleno = color_borde # Mismo color para relleno
-                        opacidad_relleno = 0.6 if mostrar_relleno else 0 # Controla la opacidad del relleno
+                        tipo = feature["properties"].get("cn_ci", "").lower() 
+                        color_borde = "#228B22" if tipo == "ci" else "#8B4513" 
+                        color_relleno = color_borde 
+                        opacidad_relleno = 0.6 if mostrar_relleno else 0 
                         return {"fillColor": color_relleno, "color": color_borde, "weight": 1.5, "fillOpacity": opacidad_relleno}
 
                     folium.GeoJson(
@@ -378,10 +373,8 @@ if "autenticado" in st.session_state and st.session_state["autenticado"]:
                         )
                     ).add_to(m)
 
-                    # Ajustar el zoom del mapa para que se ajuste a los límites de los datos filtrados
                     m.fit_bounds([[bounds[1], bounds[0]], [bounds[3], bounds[2]]])
 
-                    # Añadir leyenda
                     leyenda_html = '''
                     <div style="position: absolute; bottom: 10px; right: 10px; z-index: 9999;
                                 background-color: white; padding: 10px; border: 1px solid #ccc;
@@ -399,7 +392,6 @@ if "autenticado" in st.session_state and st.session_state["autenticado"]:
 
             st.subheader("📋 Resultados filtrados")
             if not gdf_filtrado.empty:
-                # Seleccionar y mostrar solo las columnas relevantes del DataFrame
                 cols_to_display_main_viewer = [
                     "id_rtdaf", "nom_terr", "etnia", "departamen", "municipio", 
                     "etapa", "estado_act", "tipologia", "area_ha"
@@ -408,7 +400,6 @@ if "autenticado" in st.session_state and st.session_state["autenticado"]:
                 
                 st.dataframe(gdf_filtrado[cols_to_display_main_viewer])
 
-                # Estadísticas
                 total_territorios = len(gdf_filtrado)
                 area_total = gdf_filtrado["area_ha"].sum()
                 hectareas = int(area_total)
@@ -436,7 +427,6 @@ if "autenticado" in st.session_state and st.session_state["autenticado"]:
                     unsafe_allow_html=True
                 )
                 with st.expander("📥 Opciones de descarga"):
-                    # Descargar shapefile filtrado como ZIP
                     with tempfile.TemporaryDirectory() as tmpdir:
                         gdf_filtrado_for_save = gdf_filtrado.copy()
                         if gdf_filtrado_for_save.crs is None:
@@ -455,7 +445,6 @@ if "autenticado" in st.session_state and st.session_state["autenticado"]:
                                 mime="application/zip"
                             )
 
-                    # Descargar mapa como HTML
                     html_bytes = m.get_root().render().encode("utf-8")
                     st.download_button(
                         label="🌐 Descargar mapa (HTML)",
@@ -464,7 +453,6 @@ if "autenticado" in st.session_state and st.session_state["autenticado"]:
                         mime="text/html"
                     )
 
-                    # Descargar resultados como CSV
                     csv_data = gdf_filtrado[cols_to_display_main_viewer].to_csv(index=False).encode("utf-8")
                     st.download_button(
                         label="📄 Descargar tabla como CSV",
@@ -495,46 +483,42 @@ if "autenticado" in st.session_state and st.session_state["autenticado"]:
                     if shp_files:
                         try:
                             gdf_usuario = gpd.read_file(shp_files[0])
+                            
+                            # Si el CRS del usuario no es CTM12 o 4326, se reproyectará a 4326.
+                            # Para cálculo de área, reproyectaremos a 9377 más tarde.
                             if gdf_usuario.crs != "EPSG:4326":
-                                st.info("ℹ️ Reproyectando shapefile del usuario a EPSG:4326.")
+                                st.info("ℹ️ Reproyectando shapefile del usuario a EPSG:4326 para visualización.")
                                 gdf_usuario = gdf_usuario.to_crs(epsg=4326)
 
-                            # Asegurarse de que gdf_total no sea None antes de la operación de overlay
                             if gdf_total is None:
                                 st.error("❌ Los datos principales del visor no se cargaron, no se puede realizar el análisis de traslape. Por favor, verifica la URL de los datos principales.")
                                 st.stop() 
                             
-                            # Preparar gdf_total con las áreas originales para el merge
                             gdf_total_para_merge = gdf_total[['id_rtdaf', 'area_ha']].copy()
                             gdf_total_para_merge.rename(columns={'area_ha': 'area_original_ha'}, inplace=True)
                             
-                            # Realizar la intersección
                             gdf_interseccion = gpd.overlay(gdf_usuario, gdf_total, how="intersection")
 
                             if not gdf_interseccion.empty:
-                                # --- INICIO DEL CAMBIO DE CÁLCULO DE ÁREA PARA TRASLAPE ---
-                                # Reproyectar la intersección para calcular el área de forma precisa
-                                gdf_interseccion_proj = gdf_interseccion.to_crs(epsg=3857) 
-                                gdf_interseccion["area_traslape_ha"] = (gdf_interseccion_proj.geometry.area / 10000).round(2) # Convert m^2 to hectares
-                                # --- FIN DEL CAMBIO DE CÁLCULO DE ÁREA PARA TRASLAPE ---
+                                # --- MEJORA PARA CÁLCULO DE ÁREA DE TRASLAPE PRECISO EN CTM12 ---
+                                st.info("ℹ️ Reproyectando temporalmente la intersección a EPSG:9377 para cálculo preciso de área.")
+                                gdf_interseccion_proj = gdf_interseccion.to_crs(epsg=9377) 
+                                gdf_interseccion["area_traslape_ha"] = (gdf_interseccion_proj.geometry.area / 10000).round(2)
+                                # --- FIN MEJORA PARA CÁLCULO DE ÁREA DE TRASLAPE PRECISO EN CTM12 ---
 
-                                # Fusionar con las áreas originales de los territorios étnicos
-                                # Convertir 'id_rtdaf' a string en ambos GDFs para un merge más robusto
                                 gdf_interseccion['id_rtdaf_str'] = gdf_interseccion['id_rtdaf'].astype(str)
                                 gdf_total_para_merge['id_rtdaf_str'] = gdf_total_para_merge['id_rtdaf'].astype(str)
 
                                 gdf_interseccion = pd.merge(
                                     gdf_interseccion,
-                                    gdf_total_para_merge[['id_rtdaf_str', 'area_original_ha']], # Usamos la columna string para el merge
+                                    gdf_total_para_merge[['id_rtdaf_str', 'area_original_ha']], 
                                     on='id_rtdaf_str', 
                                     how='left'
                                 )
-                                # Eliminar la columna temporal de string después del merge
                                 gdf_interseccion.drop(columns=['id_rtdaf_str'], inplace=True)
 
 
-                                # Calcular el porcentaje de traslape
-                                epsilon = 1e-9 # Un valor muy pequeño para evitar división por cero
+                                epsilon = 1e-9 
                                 gdf_interseccion['porc_traslape'] = (
                                     (gdf_interseccion['area_traslape_ha'] / (gdf_interseccion['area_original_ha'] + epsilon)) * 100
                                 ).round(2).fillna(0) 
@@ -542,7 +526,6 @@ if "autenticado" in st.session_state and st.session_state["autenticado"]:
 
                                 st.success(f"🔍 Se encontraron {len(gdf_interseccion)} intersecciones.")
 
-                                # Centrar el mapa para mostrar todas las capas relevantes
                                 combined_bounds = pd.concat([gdf_usuario, gdf_total]).total_bounds
                                 
                                 m_inter = folium.Map(
@@ -551,15 +534,12 @@ if "autenticado" in st.session_state and st.session_state["autenticado"]:
                                     tiles="CartoDB positron"
                                 )
                                 
-                                # 1. Añadir el shapefile del usuario (primera capa, en gris)
                                 folium.GeoJson(
                                     gdf_usuario, 
                                     name="Shapefile del usuario",
                                     style_function=lambda x: {"fillColor": "gray", "color": "gray", "weight": 1, "fillOpacity": 0.3}
                                 ).add_to(m_inter)
 
-                                # 2. Añadir los territorios étnicos completos (segunda capa, con borde delgado y relleno casi transparente)
-                                # Se usa gdf_total filtrado por los IDs de los territorios con intersección
                                 ids_con_traslape = gdf_interseccion['id_rtdaf'].unique()
                                 gdf_territorios_afectados = gdf_total[gdf_total['id_rtdaf'].astype(str).isin(ids_con_traslape.astype(str))]
 
@@ -567,19 +547,17 @@ if "autenticado" in st.session_state and st.session_state["autenticado"]:
                                     gdf_territorios_afectados,
                                     name="Territorios étnicos afectados",
                                     style_function=lambda x: {
-                                        "fillColor": "#346b34", # Un verde más oscuro, color institucional
+                                        "fillColor": "#346b34", 
                                         "color": "#346b34",
-                                        "weight": 2, # Borde un poco más grueso para distinguirlo
-                                        "fillOpacity": 0.1 # Muy transparente para ver la intersección encima
+                                        "weight": 2, 
+                                        "fillOpacity": 0.1 
                                     },
                                     tooltip=folium.GeoJsonTooltip(
-                                        fields=["nom_terr", "etnia", "area_ha"], # 'area_ha' aquí es el área original del territorio étnico
+                                        fields=["nom_terr", "etnia", "area_ha"], 
                                         aliases=["Territorio:", "Etnia:", "Área Original (ha):"]
                                     )
                                 ).add_to(m_inter)
 
-
-                                # 3. Añadir las intersecciones (tercera capa, en rojo, con relleno más opaco)
                                 folium.GeoJson(
                                     gdf_interseccion,
                                     name="Áreas de traslape",
@@ -591,18 +569,15 @@ if "autenticado" in st.session_state and st.session_state["autenticado"]:
                                     )
                                 ).add_to(m_inter)
                                 
-                                # Añadir control de capas
                                 folium.LayerControl().add_to(m_inter)
 
-                                # Ajustar el mapa a los límites combinados de todas las capas
                                 m_inter.fit_bounds([[combined_bounds[1], combined_bounds[0]], [combined_bounds[3], combined_bounds[2]]])
 
                                 st_folium(m_inter, width=1100, height=600)
 
                                 st.markdown("### 📋 Tabla de intersección")
-                                # Columnas a mostrar en la tabla de resultados
                                 cols_to_display = [
-                                    "id_rtdaf", # ID del territorio étnico
+                                    "id_rtdaf", 
                                     "nom_terr",
                                     "etnia",
                                     "departamen",
@@ -611,8 +586,6 @@ if "autenticado" in st.session_state and st.session_state["autenticado"]:
                                     "area_traslape_ha",
                                     "porc_traslape_str"
                                 ]
-                                # Asegúrate de que todas las columnas existan antes de seleccionarlas
-                                # Y que no contengan la columna de geometría
                                 cols_to_display = [col for col in cols_to_display if col in gdf_interseccion.columns and col != gdf_interseccion.geometry.name]
                                 
                                 st.dataframe(gdf_interseccion[cols_to_display])
@@ -623,7 +596,7 @@ if "autenticado" in st.session_state and st.session_state["autenticado"]:
                                 st.warning("No se encontraron intersecciones entre tu shapefile y los territorios cargados.")
                         except Exception as e:
                             st.error(f"❌ Error al procesar el shapefile del usuario o al realizar el análisis de traslape: {e}")
-                            st.exception(e) # Esto mostrará el traceback completo para depuración
+                            st.exception(e) 
                     else:
                         st.error("No se encontró ningún archivo .shp dentro del ZIP cargado. Asegúrate de que el ZIP contenga un shapefile válido.")
 
