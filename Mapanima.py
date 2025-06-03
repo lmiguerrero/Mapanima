@@ -534,4 +534,3 @@ with tab2:
                         st.download_button("⬇️ Descargar CSV del traslape", data=csv_traslape, file_name="traslapes_con_area.csv", mime="text/csv")
                     else:
                         st.info("✅ No se encontraron traslapes con territorios formalizados.")
-
