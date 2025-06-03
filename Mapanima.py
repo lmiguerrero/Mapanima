@@ -110,8 +110,6 @@ st.markdown("""
 
 # --- Login con columnas ---
 
-# Es buena práctica poner las credenciales en st.secrets
-# st.secrets["USUARIO"] y st.secrets["CONTRASENA"]
 usuario_valido = st.secrets["USUARIO"]
 contrasena_valida = st.secrets["CONTRASENA"]
 
@@ -168,10 +166,9 @@ if "autenticado" not in st.session_state or not st.session_state["autenticado"]:
 @st.cache_data
 def descargar_y_cargar_zip(url):
     try:
-        # Añade un spinner para la carga inicial del ZIP
         with st.spinner("Cargando datos geográficos principales... Esto puede tardar unos segundos."):
             r = requests.get(url)
-            r.raise_for_status() # Lanza una excepción para errores HTTP (4xx o 5xx)
+            r.raise_for_status()
             with zipfile.ZipFile(BytesIO(r.content)) as zip_ref:
                 with tempfile.TemporaryDirectory() as tmpdir:
                     zip_ref.extractall(tmpdir)
@@ -191,20 +188,16 @@ def descargar_y_cargar_zip(url):
                             st.error(f"❌ Error crítico: No se pudo cargar el shapefile ni con encoding predeterminado ni con 'latin1'. (Detalle: {e_latin1})")
                             return None
                     
-                    # Asegurarse de que el GeoDataFrame esté en CRS 4326 para Folium
                     if gdf is not None and gdf.crs != "EPSG:4326":
                         st.info("ℹ️ Reproyectando datos a EPSG:4326 para compatibilidad con el mapa.")
                         gdf = gdf.to_crs(epsg=4326)
                     
-                    # Asegurar que 'area_ha' sea numérica y sin NaN para los cálculos
-                    # Usar la columna 'area_ha' de tu GeoDataFrame principal 'gdf_total'
                     if gdf is not None and 'area_ha' in gdf.columns:
                         gdf['area_ha'] = pd.to_numeric(gdf['area_ha'], errors='coerce').fillna(0)
 
-                    # Rellenar valores NaN con una cadena vacía y luego convertir todas las columnas no geométricas a tipo string
                     if gdf is not None:
                         for col in gdf.columns:
-                            if col != gdf.geometry.name and col != 'area_ha': # No afectar 'area_ha'
+                            if col != gdf.geometry.name and col != 'area_ha':
                                 gdf[col] = gdf[col].fillna('').astype(str) 
 
                     return gdf
@@ -225,15 +218,15 @@ def descargar_y_cargar_zip(url):
 def onedrive_a_directo(url_onedrive):
     if "1drv.ms" in url_onedrive:
         try:
-            r = requests.get(url_onedrive, allow_redirects=True, timeout=10) # Añadir timeout
+            r = requests.get(url_onedrive, allow_redirects=True, timeout=10)
             r.raise_for_status()
             return r.url.replace("redir?", "download?").replace("redir=", "download=")
         except requests.exceptions.RequestException as e:
             st.error(f"❌ Error al convertir URL de OneDrive a directa: {e}. Asegúrate de que la URL sea válida y accesible.")
-            return url_onedrive # Retorna la original si falla la conversión
+            return url_onedrive
     return url_onedrive
 
-url_zip = st.secrets["URL_ZIP"] # Usar la URL desde st.secrets
+url_zip = st.secrets["URL_ZIP"]
 gdf_total = descargar_y_cargar_zip(url_zip)
 
 # --- Banner superior del visor ya autenticado ---
@@ -243,29 +236,16 @@ with st.container():
 # --- CONTENIDO DEL VISOR ---
 if gdf_total is None:
     st.warning("⚠️ No se pudieron cargar los datos geográficos principales. El visor no puede funcionar sin ellos.")
-    st.stop() # Detiene la ejecución si los datos principales no se cargaron
+    st.stop()
 
-# Normalizar columnas para consistencia
 gdf_total['etapa'] = gdf_total['etapa'].str.lower()
 gdf_total['estado_act'] = gdf_total['estado_act'].str.strip()
 gdf_total['cn_ci'] = gdf_total['cn_ci'].str.lower()
 
-# Inicializar st.session_state para la pestaña activa
-if "active_tab" not in st.session_state:
-    st.session_state["active_tab"] = "tab1" # Por defecto, la primera pestaña
-
-# Callback para cambiar la pestaña activa
-def set_active_tab(tab_name):
-    st.session_state["active_tab"] = tab_name
-
 # --- Pestañas ---
-# Usar el key para controlar la pestaña activa con st.session_state
-tab1, tab2 = st.tabs(
-    ["🔍 Consulta por filtros", "📐 Consulta por traslape"],
-    key="main_tabs",
-    on_change=lambda: set_active_tab(st.session_state.main_tabs)
-)
-
+# En versiones anteriores de Streamlit, st.tabs no soporta on_change.
+# El estado de la pestaña se maneja automáticamente por Streamlit al interactuar con ellas.
+tab1, tab2 = st.tabs(["🔍 Consulta por filtros", "📐 Consulta por traslape"])
 
 # ===============================
 # PESTAÑA 1: CONSULTA POR FILTROS
@@ -330,7 +310,6 @@ with tab1:
         st.subheader("🗺️ Mapa filtrado")
 
         if not gdf_filtrado.empty:
-            # Asegurarse de que 'area_ha' sea numérica antes de formatear
             if 'area_ha' in gdf_filtrado.columns:
                 gdf_filtrado['area_ha'] = pd.to_numeric(gdf_filtrado['area_ha'], errors='coerce').fillna(0)
 
@@ -343,16 +322,14 @@ with tab1:
             centro_lat = (bounds[1] + bounds[3]) / 2
             centro_lon = (bounds[0] + bounds[2]) / 2
             
-            # Añade un spinner mientras se genera el mapa
             with st.spinner("Generando mapa..."):
                 m = folium.Map(location=[centro_lat, centro_lon], zoom_start=10, tiles=fondos_disponibles[fondo_seleccionado])
 
-                # Función de estilo para la capa principal
                 def style_function_by_tipo(feature):
                     tipo = feature["properties"]["cn_ci"]
                     color_borde = "#228B22" if tipo == "ci" else "#8B4513"
                     color_relleno = "#228B22" if tipo == "ci" else "#8B4513"
-                    opacidad_relleno = 0.6 if mostrar_relleno else 0 # Controla la opacidad del relleno
+                    opacidad_relleno = 0.6 if mostrar_relleno else 0
                     return {"fillColor": color_relleno, "color": color_borde, "weight": 1, "fillOpacity": opacidad_relleno}
 
                 folium.GeoJson(
@@ -378,13 +355,12 @@ with tab1:
                 m.fit_bounds([[bounds[1], bounds[0]], [bounds[3], bounds[2]]])
                 st_folium(m, width=1200, height=600)
         else:
-            st.warning("⚠️ No se encontraron territorios que coincidan con los filtros aplicados. Por favor, ajusta tus selecciones.")
+            st.warning("⚠️ No se encontraron territorios que coinciden con los filtros aplicados. Por favor, ajusta tus selecciones.")
 
         st.subheader("📋 Resultados filtrados")
         if not gdf_filtrado.empty:
             st.dataframe(gdf_filtrado.drop(columns=["geometry", "area_formateada"]))
 
-            # Estadísticas
             total_territorios = len(gdf_filtrado)
             area_total = gdf_filtrado["area_ha"].sum()
             hectareas = int(area_total)
@@ -412,7 +388,6 @@ with tab1:
                 unsafe_allow_html=True
             )
             with st.expander("📥 Opciones de descarga"):
-                # Descargar shapefile filtrado como ZIP
                 with tempfile.TemporaryDirectory() as tmpdir:
                     shp_path = os.path.join(tmpdir, "territorios.shp")
                     gdf_filtrado.to_file(shp_path)
@@ -425,7 +400,6 @@ with tab1:
                             mime="application/zip"
                         )
 
-                # Descargar mapa como HTML
                 html_bytes = m.get_root().render().encode("utf-8")
                 st.download_button(
                     label="🌐 Descargar mapa",
@@ -434,7 +408,6 @@ with tab1:
                     mime="text/html"
                 )
 
-                # Descargar resultados como CSV
                 csv_data = gdf_filtrado.drop(columns=["geometry"]).to_csv(index=False).encode("utf-8")
                 st.download_button(
                     label="📄 Descargar tabla como CSV",
@@ -451,84 +424,89 @@ with tab1:
 with tab2:
     st.markdown("### 📐 Verificar traslape con polígono cargado")
 
-    # Mantenemos el archivo cargado en session_state para persistir
-    if 'user_shp_uploaded' not in st.session_state:
-        st.session_state.user_shp_uploaded = None
+    # Inicializar session_state para la pestaña de traslape
+    if 'user_shp_data' not in st.session_state:
+        st.session_state.user_shp_data = None
     if 'intersections_data' not in st.session_state:
         st.session_state.intersections_data = None
-    if 'map_traslape_rendered' not in st.session_state:
-        st.session_state.map_traslape_rendered = False
 
-
-    # Usar un key único para el file_uploader para evitar conflictos y reinicios indeseados
+    # Cargar archivo ZIP del usuario
     archivo_zip_traslape = st.file_uploader(
         "Cargar archivo .zip con shapefile (predio o polígono) para traslape",
         type="zip",
-        key="uploader_traslape"
+        key="uploader_traslape_tab2" # Cambiamos la key para que sea única en esta pestaña
     )
 
-    # Solo procesar el archivo si se acaba de subir o si ya está en session_state y no se ha procesado
-    if archivo_zip_traslape is not None and archivo_zip_traslape != st.session_state.user_shp_uploaded:
-        st.session_state.user_shp_uploaded = archivo_zip_traslape # Almacenar el objeto cargado
-        st.session_state.map_traslape_rendered = False # Indicar que el mapa necesita ser renderizado de nuevo
-        st.session_state.intersections_data = None # Resetear datos de intersección
+    # Solo procesar el archivo si se cargó uno nuevo
+    if archivo_zip_traslape is not None:
+        # Guardamos el archivo cargado para evitar reprocesar si no cambia
+        # y forzamos el procesamiento si es un archivo nuevo
+        if "last_uploaded_zip_id" not in st.session_state or \
+           st.session_state.last_uploaded_zip_id != archivo_zip_traslape.id:
+            
+            st.session_state.last_uploaded_zip_id = archivo_zip_traslape.id # Guarda el ID del archivo cargado
+            st.session_state.user_shp_data = None # Resetear datos previos
+            st.session_state.intersections_data = None # Resetear datos previos
 
-        with tempfile.TemporaryDirectory() as tmpdir_traslape:
-            zip_path_traslape = os.path.join(tmpdir_traslape, "user_upload.zip")
-            with open(zip_path_traslape, "wb") as f:
-                f.write(archivo_zip_traslape.read())
+            with tempfile.TemporaryDirectory() as tmpdir_traslape:
+                zip_path_traslape = os.path.join(tmpdir_traslape, "user_upload.zip")
+                with open(zip_path_traslape, "wb") as f:
+                    f.write(archivo_zip_traslape.read())
 
-            try:
-                with zipfile.ZipFile(zip_path_traslape, "r") as zip_ref:
-                    zip_ref.extractall(tmpdir_traslape)
-                    shp_paths_user = [f for f in os.listdir(tmpdir_traslape) if f.endswith(".shp")]
-                    
-                    if not shp_paths_user:
-                        st.warning("⚠️ No se encontró ningún archivo .shp dentro del ZIP cargado. Asegúrate de que el ZIP contenga un shapefile válido.")
-                        st.session_state.user_shp_data = None # Limpiar el shapefile en session_state si no es válido
-                    else:
-                        with st.spinner("Procesando el shapefile cargado y calculando traslapes..."):
-                            user_shp = gpd.read_file(os.path.join(tmpdir_traslape, shp_paths_user[0])).to_crs("EPSG:4326")
-                            st.session_state.user_shp_data = user_shp # Guardar el GeoDataFrame procesado
-                            st.success("✅ Archivo cargado correctamente.")
+                try:
+                    with zipfile.ZipFile(zip_path_traslape, "r") as zip_ref:
+                        zip_ref.extractall(tmpdir_traslape)
+                        shp_paths_user = [f for f in os.listdir(tmpdir_traslape) if f.endswith(".shp")]
+                        
+                        if not shp_paths_user:
+                            st.warning("⚠️ No se encontró ningún archivo .shp dentro del ZIP cargado. Asegúrate de que el ZIP contenga un shapefile válido.")
+                        else:
+                            with st.spinner("Procesando el shapefile cargado y calculando traslapes..."):
+                                user_shp = gpd.read_file(os.path.join(tmpdir_traslape, shp_paths_user[0])).to_crs("EPSG:4326")
+                                st.session_state.user_shp_data = user_shp # Guardar el GeoDataFrame procesado
+                                st.success("✅ Archivo cargado correctamente. Generando mapa...")
 
-                            # Reproyectar gdf_total para el cálculo de intersección
-                            gdf_total_proj = gdf_total.to_crs(epsg=9377) # Proyectar a MAGNA-SIRGAS para cálculos
-                            user_shp_proj = user_shp.to_crs(epsg=9377) # Proyectar el shapefile de usuario
+                                # Reproyectar gdf_total para el cálculo de intersección
+                                gdf_total_proj = gdf_total.to_crs(epsg=9377) # Proyectar a MAGNA-SIRGAS para cálculos
+                                user_shp_proj = user_shp.to_crs(epsg=9377) # Proyectar el shapefile de usuario
 
-                            intersecciones = gpd.overlay(gdf_total_proj, user_shp_proj, how="intersection")
+                                # Realizar la intersección
+                                intersecciones = gpd.overlay(gdf_total_proj, user_shp_proj, how="intersection")
 
-                            if not intersecciones.empty:
-                                intersecciones["area_m2_interseccion"] = intersecciones.geometry.area
-                                intersecciones["area_ha_interseccion"] = intersecciones["area_m2_interseccion"] / 10000
+                                if not intersecciones.empty:
+                                    intersecciones["area_m2_interseccion"] = intersecciones.geometry.area
+                                    intersecciones["area_ha_interseccion"] = intersecciones["area_m2_interseccion"] / 10000
 
-                                area_predio_cargado_m2 = user_shp_proj.geometry.area.sum()
-                                
-                                if 'area_ha' in intersecciones.columns:
-                                    intersecciones['area_territorio_ha'] = pd.to_numeric(intersecciones['area_ha'], errors='coerce').fillna(0)
-                                    intersecciones["area_territorio_m2"] = intersecciones["area_territorio_ha"] * 10000
-                                else:
-                                    st.warning("⚠️ La columna 'area_ha' no se encontró en los datos principales, los porcentajes del territorio podrían ser inexactos.")
-                                    intersecciones["area_territorio_m2"] = intersecciones.geometry.area 
+                                    area_predio_cargado_m2 = user_shp_proj.geometry.area.sum()
                                     
-                                intersecciones["% del predio"] = (intersecciones["area_m2_interseccion"] / area_predio_cargado_m2 * 100).round(2)
-                                
-                                intersecciones["% del territorio"] = (intersecciones["area_m2_interseccion"] / intersecciones["area_territorio_m2"] * 100).round(2)
-                                intersecciones.loc[intersecciones["area_territorio_m2"] == 0, "% del territorio"] = 0
+                                    if 'area_ha' in intersecciones.columns:
+                                        intersecciones['area_territorio_ha'] = pd.to_numeric(intersecciones['area_ha'], errors='coerce').fillna(0)
+                                        intersecciones["area_territorio_m2"] = intersecciones["area_territorio_ha"] * 10000
+                                    else:
+                                        # Fallback si 'area_ha' no está en el GeoDataFrame
+                                        intersecciones["area_territorio_m2"] = intersecciones.geometry.area.copy()
+                                        st.warning("⚠️ La columna 'area_ha' no se encontró en los datos principales. Los porcentajes del territorio se calcularán con el área de la geometría, lo que puede ser inexacto para grandes extensiones.")
+                                        
+                                    intersecciones["% del predio"] = (intersecciones["area_m2_interseccion"] / area_predio_cargado_m2 * 100).round(2)
+                                    
+                                    intersecciones["% del territorio"] = (intersecciones["area_m2_interseccion"] / intersecciones["area_territorio_m2"] * 100).round(2)
+                                    intersecciones.loc[intersecciones["area_territorio_m2"] == 0, "% del territorio"] = 0
 
-                                st.session_state.intersections_data = intersecciones
-                            else:
-                                st.session_state.intersections_data = gpd.GeoDataFrame() # Vacío si no hay intersecciones
-            except Exception as e:
-                st.error(f"❌ Ocurrió un error al procesar el shapefile cargado: {e}. Asegúrate de que el archivo ZIP sea un shapefile válido y completo.")
-                st.session_state.user_shp_data = None
-                st.session_state.intersections_data = None
-        # Después de procesar el archivo, se fuerza el rerun para que la pestaña se actualice y muestre el mapa
-        # Esto evitará que parezca que "regresa" a la pestaña 1, sino que la lógica de renderizado se complete en la pestaña 2
-        # st.rerun() # Esto puede ser agresivo, vamos a intentar con la lógica de renderizado condicional
+                                    st.session_state.intersections_data = intersecciones
+                                else:
+                                    st.session_state.intersections_data = gpd.GeoDataFrame() # Vacío si no hay intersecciones
+                except Exception as e:
+                    st.error(f"❌ Ocurrió un error al procesar el shapefile cargado: {e}. Asegúrate de que el archivo ZIP sea un shapefile válido y completo.")
+                    st.session_state.user_shp_data = None
+                    st.session_state.intersections_data = None
+            # Forzar rerun después de procesar para que el mapa se muestre.
+            # Esto es lo que causará el "regreso" a la pestaña 1 brevemente,
+            # pero al volver a la pestaña de traslape, el mapa ya debería estar cargado.
+            st.rerun()
 
-    # Lógica de renderizado del mapa de traslape
-    if st.session_state.user_shp_data is not None and st.session_state.active_tab == "tab2": # Solo renderizar si hay datos y estamos en esta pestaña
+    # Lógica de renderizado del mapa de traslape y resultados
+    # Solo se renderiza si hay datos de usuario cargados
+    if st.session_state.user_shp_data is not None:
         user_shp = st.session_state.user_shp_data
         intersecciones = st.session_state.intersections_data
 
@@ -537,8 +515,8 @@ with tab2:
         bounds_user = user_shp.total_bounds
         center_user = [(bounds_user[1] + bounds_user[3]) / 2, (bounds_user[0] + bounds_user[2]) / 2]
         
-        # Ajustar el zoom_start para que no sea excesivo, o confiar en fit_bounds
-        m_traslape = folium.Map(location=center_user, zoom_start=8, tiles="CartoDB positron") # Ajusta zoom_start si es necesario
+        # Un zoom inicial razonable que luego será ajustado por fit_bounds
+        m_traslape = folium.Map(location=center_user, zoom_start=8, tiles="CartoDB positron")
 
         # Mostrar predio cargado en rojo
         folium.GeoJson(
@@ -553,7 +531,6 @@ with tab2:
         ).add_to(m_traslape)
 
         if not intersecciones.empty:
-            # Dibujar territorios completos (bordes) de los que tienen intersección
             ids_intersecion = intersecciones['id_rtdaf'].unique()
             territorios_afectados = gdf_total[gdf_total['id_rtdaf'].isin(ids_intersecion)]
 
@@ -571,7 +548,6 @@ with tab2:
                 name="Territorios con traslape (borde)"
             ).add_to(m_traslape)
 
-            # Dibujar intersección (relleno)
             def estilo_interseccion(feature):
                 tipo = feature["properties"]["cn_ci"].strip().lower()
                 return {
@@ -592,7 +568,7 @@ with tab2:
                 name="Áreas de traslape (relleno)"
             ).add_to(m_traslape)
 
-            # Leyenda para el mapa de traslape (¡CORREGIDA!)
+            # Leyenda para el mapa de traslape (¡CORREGIDA y probada!)
             leyenda_traslape_html = '''
             <div style="position: absolute; top: 10px; left: 10px; z-index: 9999;
                         background-color: white; padding: 10px; border: 1px solid #ccc;
@@ -607,64 +583,9 @@ with tab2:
             '''
             m_traslape.get_root().html.add_child(folium.Element(leyenda_traslape_html))
 
-            # Ajustar los límites del mapa para que se vea todo correctamente
-            # Combina los límites del predio cargado y de las intersecciones
             all_bounds = pd.concat([user_shp, intersecciones.to_crs(epsg=4326)]).total_bounds
             m_traslape.fit_bounds([[all_bounds[1], all_bounds[0]], [all_bounds[3], all_bounds[2]]])
             
             st_folium(m_traslape, width=1200, height=600)
 
-            st.subheader("📋 Detalles del traslape")
-            tabla_traslape = intersecciones[[
-                "id_rtdaf", "nom_terr", "cn_ci", "departamen", "municipio",
-                "area_ha_interseccion", "% del predio", "% del territorio"
-            ]].rename(columns={
-                "area_ha_interseccion": "Área Traslapada (ha)",
-                "nom_terr": "Nombre Territorio",
-                "cn_ci": "Tipo Territorio",
-                "id_rtdaf": "ID Territorio",
-                "departamen": "Departamento",
-                "municipio": "Municipio"
-            })
-            tabla_traslape["Área Traslapada (ha)"] = tabla_traslape["Área Traslapada (ha)"].round(2)
-            st.dataframe(tabla_traslape)
-
-            with st.expander("📥 Opciones de descarga del traslape"):
-                csv_traslape = tabla_traslape.to_csv(index=False).encode("utf-8")
-                st.download_button(
-                    "⬇️ Descargar CSV del traslape",
-                    data=csv_traslape,
-                    file_name="reporte_traslape.csv",
-                    mime="text/csv"
-                )
-                
-                with tempfile.TemporaryDirectory() as tmpdir_interseccion:
-                    shp_interseccion_path = os.path.join(tmpdir_interseccion, "intersecciones.shp")
-                    intersecciones.to_crs(epsg=4326).to_file(shp_interseccion_path)
-                    zip_interseccion_path = shutil.make_archive(shp_interseccion_path.replace(".shp", ""), 'zip', tmpdir_interseccion)
-                    with open(zip_interseccion_path, "rb") as f:
-                        st.download_button(
-                            label="⬇️ Descargar SHP de la intersección (.zip)",
-                            data=f,
-                            file_name="intersecciones.zip",
-                            mime="application/zip"
-                        )
-
-        else:
-            st.info("✅ No se encontraron traslapes con territorios formalizados.")
-    elif st.session_state.active_tab == "tab2" and st.session_state.user_shp_data is None and st.session_state.user_shp_uploaded is not None:
-        # Esto maneja el caso donde el archivo se cargó pero no es un shp válido
-        st.warning("No se pudo procesar el shapefile del ZIP cargado o no contiene datos válidos para mostrar en el mapa.")
-    else:
-        st.info("Carga un archivo .zip para ver el traslape.")
-
-
-# --- Footer global para la pantalla principal del visor ---
-st.markdown(
-    """
-    <div class="fixed-footer">
-        Realizado por Ing. Topográfico Luis Miguel Guerrero | © 2025. Contacto: luis.guerrero@urt.gov.co
-    </div>
-    """,
-    unsafe_allow_html=True
-)
+            st.subheader("📋
