@@ -82,6 +82,110 @@ st.markdown("""
         font-weight: bold;
     }
     /* Estilo para el pie de página fijo */
+
+# ===============================
+# PESTAÑA 2: TRASLAPE
+# ===============================
+with st.container():
+    st.markdown("### 📐 Verificar traslape con polígono cargado")
+
+    archivo_zip = st.file_uploader("Cargar archivo .zip con shapefile (predio o polígono)", type="zip")
+
+    if archivo_zip is not None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            zip_path = os.path.join(tmpdir, "user.zip")
+            with open(zip_path, "wb") as f:
+                f.write(archivo_zip.read())
+
+            with zipfile.ZipFile(zip_path, "r") as zip_ref:
+                zip_ref.extractall(tmpdir)
+                shp_paths = [f for f in os.listdir(tmpdir) if f.endswith(".shp")]
+                if not shp_paths:
+                    st.warning("No se encontró ningún archivo .shp dentro del ZIP.")
+                else:
+                    user_shp = gpd.read_file(os.path.join(tmpdir, shp_paths[0])).to_crs("EPSG:4326")
+                    st.success("✅ Archivo cargado correctamente.")
+
+                    st.markdown("#### 🗺️ Mapa del predio cargado y traslapes encontrados")
+                    bounds = user_shp.total_bounds
+                    center = [(bounds[1] + bounds[3]) / 2, (bounds[0] + bounds[2]) / 2]
+                    m2 = folium.Map(location=center, zoom_start=10, tiles="CartoDB positron")
+
+                    folium.GeoJson(
+                        user_shp,
+                        name="Polígono cargado",
+                        style_function=lambda x: {
+                            "color": "red",
+                            "weight": 3,
+                            "fillOpacity": 0
+                        }
+                    ).add_to(m2)
+
+                    territorios_afectados = gdf_total[gdf_total.intersects(user_shp.unary_union)]
+
+                    intersecciones = gpd.overlay(gdf_total, user_shp, how="intersection").to_crs(epsg=9377)
+
+                    if not intersecciones.empty:
+                        intersecciones["area_m2"] = intersecciones.geometry.area
+                        intersecciones["area_ha"] = intersecciones["area_m2"] / 10000
+
+                        area_predio_m2 = user_shp.to_crs(epsg=9377).geometry.area.sum()
+
+                        intersecciones = intersecciones.merge(
+                            gdf_total[["id_rtdaf", "area_ha"]],
+                            on="id_rtdaf",
+                            how="left"
+                        )
+
+                        intersecciones["area_territorio_m2"] = intersecciones["area_ha"] * 10000
+
+                        intersecciones["% del predio"] = (intersecciones["area_m2"] / area_predio_m2 * 100).round(2)
+                        intersecciones["% del territorio"] = (intersecciones["area_m2"] / intersecciones["area_territorio_m2"] * 100).round(2)
+
+                        def borde_tipo(x):
+                            tipo = x["properties"]["cn_ci"].strip().lower()
+                            return {
+                                "color": "#004400" if "ci" in tipo else "#663300",
+                                "weight": 1.5,
+                                "fillOpacity": 0
+                            }
+
+                        folium.GeoJson(
+                            territorios_afectados,
+                            style_function=borde_tipo,
+                            name="Territorios completos"
+                        ).add_to(m2)
+
+                        def estilo_tipo(x):
+                            tipo = x["properties"]["cn_ci"].strip().lower()
+                            return {
+                                "fillColor": "#228B22" if "ci" in tipo else "#8B4513",
+                                "color": "#228B22" if "ci" in tipo else "#8B4513",
+                                "weight": 2,
+                                "fillOpacity": 0.4
+                            }
+
+                        folium.GeoJson(
+                            intersecciones.to_crs(epsg=4326),
+                            tooltip=folium.GeoJsonTooltip(
+                                fields=["nom_terr", "cn_ci", "area_ha", "% del predio", "% del territorio"],
+                                aliases=["Nombre:", "Tipo:", "Área traslapada (ha):", "% del predio:", "% del territorio:"]
+                            ),
+                            style_function=estilo_tipo
+                        ).add_to(m2)
+
+                        m2.fit_bounds([[bounds[1], bounds[0]], [bounds[3], bounds[2]]])
+                        st_folium(m2, width=1200, height=600)
+
+                        st.subheader("📋 Detalles del traslape")
+                        tabla = intersecciones[["id_rtdaf", "nom_terr", "cn_ci", "departamen", "municipio", "area_ha", "% del predio", "% del territorio"]]
+                        tabla["area_ha"] = tabla["area_ha"].round(2)
+                        st.dataframe(tabla)
+
+                        csv_traslape = tabla.to_csv(index=False).encode("utf-8")
+                        st.download_button("⬇️ Descargar CSV del traslape", data=csv_traslape, file_name="traslapes_con_area.csv", mime="text/csv")
+                    else:
+                        st.info("✅ No se encontraron traslapes con territorios formalizados.")
     .fixed-footer {
         position: fixed;
         bottom: 0;
