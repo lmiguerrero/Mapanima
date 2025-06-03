@@ -506,7 +506,7 @@ else:
     intersecciones["% del territorio"] = None
 
 
-                        def borde_tipo(x):
+    def borde_tipo(x):
                             tipo = x["properties"]["Tipo"].strip().lower()
                             return {
                                 "color": "#004400" if "indigena" in tipo else "#663300",
@@ -520,7 +520,7 @@ else:
                             name="Territorios completos"
                         ).add_to(m2)
 
-                        def estilo_tipo(x):
+    def estilo_tipo(x):
                             tipo = x["properties"]["Tipo"].strip().lower()
                             return {
                                 "fillColor": "#228B22" if "indigena" in tipo else "#8B4513",
