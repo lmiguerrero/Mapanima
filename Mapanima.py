@@ -1,6 +1,6 @@
 # --- VERSION FINAL CON TRASLAPE 03/06/2025 ---
 # --- VISOR ÉTNICO + ANÁLISIS DE TRASLAPE ---
-# --- Miguel Guerrero & Kai 🤖 ---
+# --- Miguel Guerrero ---
 
 import streamlit as st
 import geopandas as gpd
@@ -284,7 +284,34 @@ if "autenticado" in st.session_state and st.session_state["autenticado"]:
         # --- CAMBIO: placeholders en español para multiselect ---
         etapa_sel = st.sidebar.multiselect("Filtrar por etapa", sorted(gdf_total['etapa'].unique()), placeholder="Selecciona una o más etapas")
         estado_sel = st.sidebar.multiselect("Filtrar por estado del caso", sorted(gdf_total['estado_act'].unique()), placeholder="Selecciona uno o más estados")
-        tipo_sel = st.sidebar.multiselect("Filtrar por tipo de territorio", sorted(gdf_total['cn_ci'].unique()), placeholder="Selecciona uno o más tipos")
+        
+        # --- INICIO DEL CAMBIO PARA 'TIPO DE TERRITORIO' ---
+        # 1. Definir el mapeo de códigos a nombres completos
+        tipo_territorio_map = {
+            "ci": "Comunidades Indígenas",
+            "cn": "Comunidades Negras"
+            # Agrega aquí cualquier otro código que puedas tener, por ejemplo:
+            # "afro": "Comunidades Afrocolombianas",
+            # "raizales": "Comunidades Raizales"
+        }
+
+        # 2. Obtener las opciones únicas de la columna 'cn_ci' y mapearlas a los nombres completos para mostrar al usuario
+        #    Usamos .get(code, code) para que si hay un código no mapeado, se muestre el código directamente.
+        opciones_tipo_display = sorted([tipo_territorio_map.get(code, code) for code in gdf_total['cn_ci'].unique()])
+        
+        # 3. Mostrar el multiselect con los nombres completos
+        tipo_display_sel = st.sidebar.multiselect(
+            "Filtrar por tipo de territorio", 
+            options=opciones_tipo_display, 
+            placeholder="Selecciona uno o más tipos"
+        )
+
+        # 4. Convertir las selecciones del usuario (nombres completos) de vuelta a los códigos internos para el filtrado
+        #    Esto requiere un mapa inverso para buscar el código a partir del nombre mostrado.
+        reverse_tipo_map = {v: k for k, v in tipo_territorio_map.items()}
+        tipo_sel = [reverse_tipo_map.get(display_name, display_name) for display_name in tipo_display_sel]
+        # --- FIN DEL CAMBIO PARA 'TIPO DE TERRITORIO' ---
+
         depto_sel = st.sidebar.multiselect("Filtrar por departamento", sorted(gdf_total['departamen'].unique()), placeholder="Selecciona uno o más departamentos")
         
         # --- CAMBIO: placeholder en español para selectbox ---
@@ -329,8 +356,12 @@ if "autenticado" in st.session_state and st.session_state["autenticado"]:
                 gdf_filtrado = gdf_filtrado[gdf_filtrado["etapa"].isin(etapa_sel)]
             if estado_sel:
                 gdf_filtrado = gdf_filtrado[gdf_filtrado["estado_act"].isin(estado_sel)]
-            if tipo_sel:
+            
+            # --- Importante: Usa tipo_sel (los códigos internos) para el filtrado ---
+            if tipo_sel: 
                 gdf_filtrado = gdf_filtrado[gdf_filtrado["cn_ci"].isin(tipo_sel)]
+            # --- Fin del uso de tipo_sel ---
+
             if depto_sel:
                 gdf_filtrado = gdf_filtrado[gdf_filtrado["departamen"].isin(depto_sel)]
             
@@ -378,13 +409,14 @@ if "autenticado" in st.session_state and st.session_state["autenticado"]:
 
                     m.fit_bounds([[bounds[1], bounds[0]], [bounds[3], bounds[2]]])
 
-                    leyenda_html = '''
+                    # --- Cambio: Leyenda actualizada para usar nombres largos (como referencia para la leyenda) ---
+                    leyenda_html = f'''
                     <div style="position: absolute; bottom: 10px; right: 10px; z-index: 9999;
                                 background-color: white; padding: 10px; border: 1px solid #ccc;
                                 font-size: 14px; box-shadow: 2px 2px 4px rgba(0,0,0,0.1);">
                         <strong>Leyenda</strong><br>
-                        <i style="background:#228B22; opacity:0.7; width:10px; height:10px; display:inline-block; border:1px solid #228B22;"></i> Comunidades Indígenas (CI)<br>
-                        <i style="background:#8B4513; opacity:0.7; width:10px; height:10px; display:inline-block; border:1px solid #8B4513;"></i> Comunidades Negras (CN)<br>
+                        <i style="background:#228B22; opacity:0.7; width:10px; height:10px; display:inline-block; border:1px solid #228B22;"></i> {tipo_territorio_map.get("ci", "CI")}<br>
+                        <i style="background:#8B4513; opacity:0.7; width:10px; height:10px; display:inline-block; border:1px solid #8B4513;"></i> {tipo_territorio_map.get("cn", "CN")}<br>
                     </div>
                     '''
                     m.get_root().html.add_child(folium.Element(leyenda_html))
@@ -397,11 +429,19 @@ if "autenticado" in st.session_state and st.session_state["autenticado"]:
             if not gdf_filtrado.empty:
                 cols_to_display_main_viewer = [
                     "id_rtdaf", "nom_terr", "etnia", "departamen", "municipio", 
-                    "etapa", "estado_act", "tipologia", "area_ha"
+                    "etapa", "estado_act", "tipologia", "cn_ci", "area_ha" # Mantener cn_ci aquí para mapeo
                 ]
                 cols_to_display_main_viewer = [col for col in cols_to_display_main_viewer if col in gdf_filtrado.columns]
                 
-                st.dataframe(gdf_filtrado[cols_to_display_main_viewer])
+                # --- Cambio: Mostrar nombres largos en la tabla si es posible y relevante ---
+                gdf_filtrado_display = gdf_filtrado.copy()
+                if 'cn_ci' in gdf_filtrado_display.columns:
+                    gdf_filtrado_display['cn_ci_display'] = gdf_filtrado_display['cn_ci'].apply(lambda x: tipo_territorio_map.get(x, x))
+                    if 'cn_ci' in cols_to_display_main_viewer:
+                        # Reemplazar 'cn_ci' por 'cn_ci_display' para la visualización en el dataframe
+                        cols_to_display_main_viewer[cols_to_display_main_viewer.index('cn_ci')] = 'cn_ci_display'
+                
+                st.dataframe(gdf_filtrado_display[cols_to_display_main_viewer])
 
                 total_territorios = len(gdf_filtrado)
                 area_total = gdf_filtrado["area_ha"].sum()
@@ -422,8 +462,8 @@ if "autenticado" in st.session_state and st.session_state["autenticado"]:
                         color: #2e7d32;'>
                         <strong>📊 Estadísticas del resultado:</strong><br>
                         Territorios filtrados: <strong>{total_territorios}</strong><br>
-                        ▸ Comunidades indígenas (ci): <strong>{cuenta_ci}</strong><br>
-                        ▸ Consejos comunitarios (cn): <strong>{cuenta_cn}</strong><br>
+                        ▸ {tipo_territorio_map.get("ci", "Comunidades Indígenas")}: <strong>{cuenta_ci}</strong><br>
+                        ▸ {tipo_territorio_map.get("cn", "Comunidades Negras")}: <strong>{cuenta_cn}</strong><br>
                         Área Cartográfica: <strong>{hectareas} ha + {metros2:} m²</strong>
                     </div>
                     ''',
@@ -456,7 +496,14 @@ if "autenticado" in st.session_state and st.session_state["autenticado"]:
                         mime="text/html"
                     )
 
-                    csv_data = gdf_filtrado[cols_to_display_main_viewer].to_csv(index=False).encode("utf-8")
+                    # --- Cambio: Descargar tabla con nombres largos si la columna cn_ci_display existe ---
+                    # Asegurarse de que el CSV de descarga también use los nombres largos si se desea
+                    if 'cn_ci_display' in gdf_filtrado_display.columns:
+                        # Crear una lista de columnas a exportar, reemplazando 'cn_ci' con 'cn_ci_display' si está presente
+                        csv_cols = [col if col != 'cn_ci' else 'cn_ci_display' for col in cols_to_display_main_viewer]
+                        csv_data = gdf_filtrado_display[csv_cols].to_csv(index=False).encode("utf-8")
+                    else:
+                        csv_data = gdf_filtrado[cols_to_display_main_viewer].to_csv(index=False).encode("utf-8")
                     st.download_button(
                         label="📄 Descargar tabla como CSV",
                         data=csv_data,
@@ -501,7 +548,6 @@ if "autenticado" in st.session_state and st.session_state["autenticado"]:
                             gdf_interseccion = gpd.overlay(gdf_usuario, gdf_total, how="intersection")
 
                             if not gdf_interseccion.empty:
-                                # Reproyectar la intersección para calcular el área de forma precisa
                                 st.info("ℹ️ Reproyectando temporalmente la intersección a EPSG:9377 para cálculo preciso de área.")
                                 gdf_interseccion_proj = gdf_interseccion.to_crs(epsg=9377) 
                                 gdf_interseccion["area_traslape_ha"] = (gdf_interseccion_proj.geometry.area / 10000).round(2)
@@ -578,7 +624,13 @@ if "autenticado" in st.session_state and st.session_state["autenticado"]:
                                 st_folium(m_inter, width=1100, height=600)
 
                                 st.markdown("### 📋 Tabla de intersección")
-                                cols_to_display = [
+                                # --- Cambio: Mostrar nombres largos en la tabla si es posible y relevante para traslape ---
+                                gdf_interseccion_display = gdf_interseccion.copy()
+                                if 'cn_ci' in gdf_interseccion_display.columns:
+                                    gdf_interseccion_display['cn_ci_display'] = gdf_interseccion_display['cn_ci'].apply(lambda x: tipo_territorio_map.get(x, x))
+                                
+                                # Definir las columnas a mostrar, incluyendo 'cn_ci_display' si existe
+                                cols_to_display_interseccion = [
                                     "id_rtdaf", 
                                     "nom_terr",
                                     "etnia",
@@ -588,11 +640,19 @@ if "autenticado" in st.session_state and st.session_state["autenticado"]:
                                     "area_traslape_ha",
                                     "porc_traslape_str"
                                 ]
-                                cols_to_display = [col for col in cols_to_display if col in gdf_interseccion.columns and col != gdf_interseccion.geometry.name]
+                                # Si la columna 'cn_ci' está en el original y tenemos su versión display, la añadimos/reemplazamos
+                                if 'cn_ci' in gdf_interseccion_display.columns:
+                                    if 'cn_ci' in cols_to_display_interseccion:
+                                        cols_to_display_interseccion[cols_to_display_interseccion.index('cn_ci')] = 'cn_ci_display'
+                                    else:
+                                        cols_to_display_interseccion.append('cn_ci_display')
                                 
-                                st.dataframe(gdf_interseccion[cols_to_display])
+                                # Filtrar solo las columnas que realmente existen en el DataFrame
+                                final_cols_for_table_interseccion = [col for col in cols_to_display_interseccion if col in gdf_interseccion_display.columns and col != gdf_interseccion_display.geometry.name]
 
-                                csv_inter = gdf_interseccion[cols_to_display].to_csv(index=False).encode("utf-8")
+                                st.dataframe(gdf_interseccion_display[final_cols_for_table_interseccion])
+
+                                csv_inter = gdf_interseccion_display[final_cols_for_table_interseccion].to_csv(index=False).encode("utf-8")
                                 st.download_button("💾 Descargar resultados de intersección como CSV", csv_inter, "intersecciones.csv", "text/csv")
                             else:
                                 st.warning("No se encontraron intersecciones entre tu shapefile y los territorios cargados.")
