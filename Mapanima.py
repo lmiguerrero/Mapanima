@@ -1,5 +1,6 @@
 # --- VERSION FINAL CON TRASLAPE 03/06/2025 ---
 # --- VISOR ÉTNICO + ANÁLISIS DE TRASLAPE ---
+# --- Miguel Guerrero & Kai 🤖 ---
 
 import streamlit as st
 import geopandas as gpd
@@ -280,13 +281,16 @@ if "autenticado" in st.session_state and st.session_state["autenticado"]:
                 gdf_total[col_name] = '' 
         
         st.sidebar.header("🎯 Filtros")
-        etapa_sel = st.sidebar.multiselect("Filtrar por etapa", sorted(gdf_total['etapa'].unique()))
-        estado_sel = st.sidebar.multiselect("Filtrar por estado del caso", sorted(gdf_total['estado_act'].unique()))
-        tipo_sel = st.sidebar.multiselect("Filtrar por tipo de territorio", sorted(gdf_total['cn_ci'].unique()))
-        depto_sel = st.sidebar.multiselect("Filtrar por departamento", sorted(gdf_total['departamen'].unique()))
+        # --- CAMBIO: placeholders en español para multiselect ---
+        etapa_sel = st.sidebar.multiselect("Filtrar por etapa", sorted(gdf_total['etapa'].unique()), placeholder="Selecciona una o más etapas")
+        estado_sel = st.sidebar.multiselect("Filtrar por estado del caso", sorted(gdf_total['estado_act'].unique()), placeholder="Selecciona uno o más estados")
+        tipo_sel = st.sidebar.multiselect("Filtrar por tipo de territorio", sorted(gdf_total['cn_ci'].unique()), placeholder="Selecciona uno o más tipos")
+        depto_sel = st.sidebar.multiselect("Filtrar por departamento", sorted(gdf_total['departamen'].unique()), placeholder="Selecciona uno o más departamentos")
         
+        # --- CAMBIO: placeholder en español para selectbox ---
         nombre_opciones = sorted(gdf_total['nom_terr'].unique())
-        nombre_seleccionado = st.sidebar.selectbox("🔍 Buscar por nombre (nom_terr)", options=[""] + nombre_opciones)
+        nombre_seleccionado = st.sidebar.selectbox("🔍 Buscar por nombre (nom_terr)", options=[""] + nombre_opciones, index=0, placeholder="Selecciona un nombre")
+        
         id_buscar = st.sidebar.text_input("🔍 Buscar por ID (id_rtdaf)")
 
         fondos_disponibles = {
@@ -483,8 +487,6 @@ if "autenticado" in st.session_state and st.session_state["autenticado"]:
                         try:
                             gdf_usuario = gpd.read_file(shp_files[0])
                             
-                            # Si el CRS del usuario no es CTM12 o 4326, se reproyectará a 4326.
-                            # Para cálculo de área, reproyectaremos a 9377 más tarde.
                             if gdf_usuario.crs != "EPSG:4326":
                                 st.info("ℹ️ Reproyectando shapefile del usuario a EPSG:4326 para visualización.")
                                 gdf_usuario = gdf_usuario.to_crs(epsg=4326)
@@ -499,11 +501,10 @@ if "autenticado" in st.session_state and st.session_state["autenticado"]:
                             gdf_interseccion = gpd.overlay(gdf_usuario, gdf_total, how="intersection")
 
                             if not gdf_interseccion.empty:
-                                # --- MEJORA PARA CÁLCULO DE ÁREA DE TRASLAPE PRECISO EN CTM12 ---
+                                # Reproyectar la intersección para calcular el área de forma precisa
                                 st.info("ℹ️ Reproyectando temporalmente la intersección a EPSG:9377 para cálculo preciso de área.")
                                 gdf_interseccion_proj = gdf_interseccion.to_crs(epsg=9377) 
                                 gdf_interseccion["area_traslape_ha"] = (gdf_interseccion_proj.geometry.area / 10000).round(2)
-                                # --- FIN MEJORA PARA CÁLCULO DE ÁREA DE TRASLAPE PRECISO EN CTM12 ---
 
                                 gdf_interseccion['id_rtdaf_str'] = gdf_interseccion['id_rtdaf'].astype(str)
                                 gdf_total_para_merge['id_rtdaf_str'] = gdf_total_para_merge['id_rtdaf'].astype(str)
@@ -525,11 +526,12 @@ if "autenticado" in st.session_state and st.session_state["autenticado"]:
 
                                 st.success(f"🔍 Se encontraron {len(gdf_interseccion)} intersecciones.")
 
-                                combined_bounds = pd.concat([gdf_usuario, gdf_total]).total_bounds
+                                # --- CAMBIO: Centrar el mapa directamente en la intersección ---
+                                inter_bounds = gdf_interseccion.total_bounds 
                                 
                                 m_inter = folium.Map(
-                                    location=[(combined_bounds[1] + combined_bounds[3]) / 2, (combined_bounds[0] + combined_bounds[2]) / 2],
-                                    zoom_start=8,
+                                    location=[(inter_bounds[1] + inter_bounds[3]) / 2, (inter_bounds[0] + inter_bounds[2]) / 2],
+                                    zoom_start=12, # Un zoom inicial más cercano para el área de traslape
                                     tiles="CartoDB positron"
                                 )
                                 
@@ -570,7 +572,8 @@ if "autenticado" in st.session_state and st.session_state["autenticado"]:
                                 
                                 folium.LayerControl().add_to(m_inter)
 
-                                m_inter.fit_bounds([[combined_bounds[1], combined_bounds[0]], [combined_bounds[3], combined_bounds[2]]])
+                                # Ajustar el mapa a los límites de la intersección (esto hará el zoom deseado)
+                                m_inter.fit_bounds([[inter_bounds[1], inter_bounds[0]], [inter_bounds[3], inter_bounds[2]]])
 
                                 st_folium(m_inter, width=1100, height=600)
 
