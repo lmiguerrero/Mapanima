@@ -485,7 +485,6 @@ with tab2:
                         intersecciones["area_ha"] = intersecciones["area_m2"] / 10000
 
                         area_predio_m2 = user_shp.to_crs(epsg=9377).geometry.area.sum()
-                        intersecciones["area_territorio_m2"] = intersecciones["AREA_TOTAL"] * 10000
 
                         intersecciones["% del predio"] = (intersecciones["area_m2"] / area_predio_m2 * 100).round(2)
                         intersecciones["% del territorio"] = (intersecciones["area_m2"] / intersecciones["area_territorio_m2"] * 100).round(2)
