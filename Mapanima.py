@@ -1,5 +1,5 @@
-# --- VERSION FINAL CON TRASLAPE 03/06/2025 ---
-# --- VISOR ÉTNICO + ANÁLISIS DE TRASLAPE ---
+# --- VERSION 1---
+# --- VISOR ÉTNICO ---
 # --- Miguel Guerrero ---
 
 import streamlit as st
@@ -263,7 +263,8 @@ if "autenticado" in st.session_state and st.session_state["autenticado"]:
 
 # --- PESTAÑAS ---
 if "autenticado" in st.session_state and st.session_state["autenticado"]:
-    tabs = st.tabs(["🗺️ Visor principal", "📐 Análisis de traslape"])
+    # MODIFICATION: Removed "📐 Análisis de traslape" tab
+    tabs = st.tabs(["🗺️ Visor principal"]) 
 
     # --- VISOR PRINCIPAL ---
     with tabs[0]:
@@ -512,155 +513,6 @@ if "autenticado" in st.session_state and st.session_state["autenticado"]:
                     )
             else:
                 st.info("No hay datos para mostrar en la tabla o descargar con los filtros actuales.")
-
-    # --- ANÁLISIS DE TRASLAPE ---
-    with tabs[1]:
-        st.subheader("📐 Análisis de traslape entre tu shapefile y los territorios étnicos")
-        st.markdown("Carga tu propio shapefile (en formato .zip) para analizar su intersección con los territorios étnicos principales.")
-
-        archivo_zip = st.file_uploader("📂 Carga un shapefile en formato .zip", type=["zip"])
-
-        if archivo_zip is not None:
-            with st.spinner("Procesando shapefile del usuario..."):
-                with tempfile.TemporaryDirectory() as tmpdir:
-                    zip_path = os.path.join(tmpdir, "archivo.zip")
-                    with open(zip_path, "wb") as f:
-                        f.write(archivo_zip.read())
-                    with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-                        zip_ref.extractall(tmpdir)
-                    shp_files = [os.path.join(tmpdir, f) for f in os.listdir(tmpdir) if f.endswith(".shp")]
-
-                    if shp_files:
-                        try:
-                            gdf_usuario = gpd.read_file(shp_files[0])
-                            
-                            if gdf_usuario.crs != "EPSG:4326":
-                                st.info("ℹ️ Reproyectando shapefile del usuario a EPSG:4326 para visualización.")
-                                gdf_usuario = gdf_usuario.to_crs(epsg=4326)
-
-                            if gdf_total is None:
-                                st.error("❌ Los datos principales del visor no se cargaron, no se puede realizar el análisis de traslape. Por favor, verifica la URL de los datos principales.")
-                                st.stop() 
-                            
-                            gdf_total_para_merge = gdf_total[['id_rtdaf', 'area_ha']].copy()
-                            gdf_total_para_merge.rename(columns={'area_ha': 'area_original_ha'}, inplace=True)
-                            
-                            gdf_interseccion = gpd.overlay(gdf_usuario, gdf_total, how="intersection")
-
-                            if not gdf_interseccion.empty:
-                                st.info("ℹ️ Reproyectando temporalmente la intersección a EPSG:9377 para cálculo preciso de área.")
-                                gdf_interseccion_proj = gdf_interseccion.to_crs(epsg=9377) 
-                                gdf_interseccion["area_traslape_ha"] = (gdf_interseccion_proj.geometry.area / 10000).round(2)
-
-                                gdf_interseccion['id_rtdaf_str'] = gdf_interseccion['id_rtdaf'].astype(str)
-                                gdf_total_para_merge['id_rtdaf_str'] = gdf_total_para_merge['id_rtdaf'].astype(str)
-
-                                gdf_interseccion = pd.merge(
-                                    gdf_interseccion,
-                                    gdf_total_para_merge[['id_rtdaf_str', 'area_original_ha']], 
-                                    on='id_rtdaf_str', 
-                                    how='left'
-                                )
-                                gdf_interseccion.drop(columns=['id_rtdaf_str'], inplace=True)
-
-
-                                epsilon = 1e-9 
-                                gdf_interseccion['porc_traslape'] = (
-                                    (gdf_interseccion['area_traslape_ha'] / (gdf_interseccion['area_original_ha'] + epsilon)) * 100
-                                ).round(2).fillna(0) 
-                                gdf_interseccion['porc_traslape_str'] = gdf_interseccion['porc_traslape'].astype(str) + '%'
-
-                                st.success(f"🔍 Se encontraron {len(gdf_interseccion)} intersecciones.")
-
-                                # --- CAMBIO: Centrar el mapa directamente en la intersección ---
-                                inter_bounds = gdf_interseccion.total_bounds 
-                                
-                                m_inter = folium.Map(
-                                    location=[(inter_bounds[1] + inter_bounds[3]) / 2, (inter_bounds[0] + inter_bounds[2]) / 2],
-                                    zoom_start=12, # Un zoom inicial más cercano para el área de traslape
-                                    tiles="CartoDB positron"
-                                )
-                                
-                                folium.GeoJson(
-                                    gdf_usuario, 
-                                    name="Shapefile del usuario",
-                                    style_function=lambda x: {"fillColor": "gray", "color": "gray", "weight": 1, "fillOpacity": 0.3}
-                                ).add_to(m_inter)
-
-                                ids_con_traslape = gdf_interseccion['id_rtdaf'].unique()
-                                gdf_territorios_afectados = gdf_total[gdf_total['id_rtdaf'].astype(str).isin(ids_con_traslape.astype(str))]
-
-                                folium.GeoJson(
-                                    gdf_territorios_afectados,
-                                    name="Territorios étnicos afectados",
-                                    style_function=lambda x: {
-                                        "fillColor": "#346b34", 
-                                        "color": "#346b34",
-                                        "weight": 2, 
-                                        "fillOpacity": 0.1 
-                                    },
-                                    tooltip=folium.GeoJsonTooltip(
-                                        fields=["nom_terr", "etnia", "area_ha"], 
-                                        aliases=["Territorio:", "Etnia:", "Área Original (ha):"]
-                                    )
-                                ).add_to(m_inter)
-
-                                folium.GeoJson(
-                                    gdf_interseccion,
-                                    name="Áreas de traslape",
-                                    style_function=lambda x: {"fillColor": "red", "color": "red", "weight": 1.5, "fillOpacity": 0.7},
-                                    tooltip=folium.GeoJsonTooltip(
-                                        fields=["nom_terr", "etnia", "area_traslape_ha", "porc_traslape_str"],
-                                        aliases=["Territorio:", "Etnia:", "Área traslapada (ha):", "Porcentaje traslapado:"],
-                                        localize=True
-                                    )
-                                ).add_to(m_inter)
-                                
-                                folium.LayerControl().add_to(m_inter)
-
-                                # Ajustar el mapa a los límites de la intersección (esto hará el zoom deseado)
-                                m_inter.fit_bounds([[inter_bounds[1], inter_bounds[0]], [inter_bounds[3], inter_bounds[2]]])
-
-                                st_folium(m_inter, width=1100, height=600)
-
-                                st.markdown("### 📋 Tabla de intersección")
-                                # --- Cambio: Mostrar nombres largos en la tabla si es posible y relevante para traslape ---
-                                gdf_interseccion_display = gdf_interseccion.copy()
-                                if 'cn_ci' in gdf_interseccion_display.columns:
-                                    gdf_interseccion_display['cn_ci_display'] = gdf_interseccion_display['cn_ci'].apply(lambda x: tipo_territorio_map.get(x, x))
-                                
-                                # Definir las columnas a mostrar, incluyendo 'cn_ci_display' si existe
-                                cols_to_display_interseccion = [
-                                    "id_rtdaf", 
-                                    "nom_terr",
-                                    "etnia",
-                                    "departamen",
-                                    "municipio",
-                                    "area_original_ha",
-                                    "area_traslape_ha",
-                                    "porc_traslape_str"
-                                ]
-                                # Si la columna 'cn_ci' está en el original y tenemos su versión display, la añadimos/reemplazamos
-                                if 'cn_ci' in gdf_interseccion_display.columns:
-                                    if 'cn_ci' in cols_to_display_interseccion:
-                                        cols_to_display_interseccion[cols_to_display_interseccion.index('cn_ci')] = 'cn_ci_display'
-                                    else:
-                                        cols_to_display_interseccion.append('cn_ci_display')
-                                
-                                # Filtrar solo las columnas que realmente existen en el DataFrame
-                                final_cols_for_table_interseccion = [col for col in cols_to_display_interseccion if col in gdf_interseccion_display.columns and col != gdf_interseccion_display.geometry.name]
-
-                                st.dataframe(gdf_interseccion_display[final_cols_for_table_interseccion])
-
-                                csv_inter = gdf_interseccion_display[final_cols_for_table_interseccion].to_csv(index=False).encode("utf-8")
-                                st.download_button("💾 Descargar resultados de intersección como CSV", csv_inter, "intersecciones.csv", "text/csv")
-                            else:
-                                st.warning("No se encontraron intersecciones entre tu shapefile y los territorios cargados.")
-                        except Exception as e:
-                            st.error(f"❌ Error al procesar el shapefile del usuario o al realizar el análisis de traslape: {e}")
-                            st.exception(e) 
-                    else:
-                        st.error("No se encontró ningún archivo .shp dentro del ZIP cargado. Asegúrate de que el ZIP contenga un shapefile válido.")
 
 # --- Footer global para la pantalla principal del visor (se muestra después del login) ---
 if "autenticado" in st.session_state and st.session_state["autenticado"]:
