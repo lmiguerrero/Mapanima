@@ -1,10 +1,12 @@
-# --- VERSION 1---
-# --- VISOR ÉTNICO ---
-# --- Miguel Guerrero ---
+# Mapanima - Geovisor Étnico
+# Este script de Streamlit proporciona una interfaz interactiva para visualizar
+# y filtrar datos geoespaciales de territorios étnicos en Colombia.
+# Desarrollado por Miguel Guerrero, DAE - Unidad de Restitución de Tierras.
+# Última actualización: 03/06/2025
 
-import streamlit as st
-import geopandas as gpd
-import pandas as pd
+import streamlit as st # Para la construcción de la interfaz de usuario
+import geopandas as gpd # Para el manejo de datos geoespaciales
+import pandas as pd #Para manipulación de datos tabulares
 import zipfile
 import tempfile
 import os
@@ -290,10 +292,7 @@ if "autenticado" in st.session_state and st.session_state["autenticado"]:
         # 1. Definir el mapeo de códigos a nombres completos
         tipo_territorio_map = {
             "ci": "Comunidades Indígenas",
-            "cn": "Comunidades Negras"
-            # Agrega aquí cualquier otro código que puedas tener, por ejemplo:
-            # "afro": "Comunidades Afrocolombianas",
-            # "raizales": "Comunidades Raizales"
+            "cn": "Comunidades negras, afrocolombianas, raizales y palenqueras"
         }
 
         # 2. Obtener las opciones únicas de la columna 'cn_ci' y mapearlas a los nombres completos para mostrar al usuario
@@ -464,7 +463,7 @@ if "autenticado" in st.session_state and st.session_state["autenticado"]:
                         <strong>📊 Estadísticas del resultado:</strong><br>
                         Territorios filtrados: <strong>{total_territorios}</strong><br>
                         ▸ {tipo_territorio_map.get("ci", "Comunidades Indígenas")}: <strong>{cuenta_ci}</strong><br>
-                        ▸ {tipo_territorio_map.get("cn", "Comunidades Negras")}: <strong>{cuenta_cn}</strong><br>
+                        ▸ {tipo_territorio_map.get("cn", "Comunidades negras, afrocolombianas, raizales y palenqueras")}: <strong>{cuenta_cn}</strong><br>
                         Área Cartográfica: <strong>{hectareas} ha + {metros2:} m²</strong>
                     </div>
                     ''',
